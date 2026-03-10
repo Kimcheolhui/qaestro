@@ -141,7 +141,7 @@ The system consists of three main layers.
 ```
 Interaction Layer
       ↓
-Agent Runtime
+Agent Runtime (Copilot SDK)
       ↓
 SDLC Agent Workflow
 ```
@@ -157,16 +157,19 @@ Examples:
 - CLI
 - Web UI
 
-### Agent Runtime
+### Agent Runtime (Copilot SDK)
 
-Responsible for:
+The core orchestration layer is built using **Copilot SDK**.
 
-- multi-agent orchestration
-- shared context management
-- tool execution
-- workflow coordination
+Copilot SDK provides:
 
-This runtime manages communication and dependencies between agents.
+- agent runtime environment
+- multi-agent coordination
+- tool integration
+- execution context management
+- workflow orchestration
+
+This runtime enables agents to communicate, invoke tools, and operate within a shared context.
 
 ### SDLC Agent Workflow
 
