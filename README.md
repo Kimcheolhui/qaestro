@@ -88,7 +88,7 @@ Slack/Teams는 Test Control Channel이 아닌 **QA Strategy Alignment Interface*
 
 ```
 Core (MIT License)
-├── GitHub App / GitLab Webhook
+├── GitHub App
 ├── Behaviour Analyzer (repo evolution 분석)
 ├── Strategy Engine (validation 전략 생성/진화)
 └── Connectors
@@ -96,6 +96,8 @@ Core (MIT License)
     ├── openai / anthropic / azure-ai / ollama
     └── postgres / mongodb / redis
 ```
+
+아키텍처 상세는 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), 구현용 레포 구조 제안은 [docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md), 기술 선택 방향은 [docs/TECH_DECISIONS.md](docs/TECH_DECISIONS.md) 참고.
 
 ## License
 
