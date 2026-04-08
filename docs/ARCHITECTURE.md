@@ -2,6 +2,8 @@
 
 컴포넌트 간 Integration 구조 설계. (ref: [#1](https://github.com/Kimcheolhui/devclaw/issues/1), [#3](https://github.com/Kimcheolhui/devclaw/issues/3))
 
+물리적 레포 구조는 [PROJECT_STRUCTURE.md](./PROJECT_STRUCTURE.md) 참고.
+
 ## Event Flow
 
 ```mermaid
@@ -13,7 +15,7 @@ flowchart TB
     end
 
     subgraph Event Ingestion Layer
-        EI["Event Router<br/>(공통 이벤트 인터페이스)"]
+        EI["Event Router (Orchestrator)<br/>(공통 이벤트 인터페이스)"]
     end
 
     subgraph Core Engine
