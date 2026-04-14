@@ -24,7 +24,6 @@ src/            — 단일 Python 코드 루트. 아래 그룹으로 구성
     knowledge/  — knowledge backing store adapter
   shared/       — config, logger, tracing, util
 tests/          — fixtures, integration, e2e, replay
-infra/          — github-app, chatops, storage provisioning
 docs/           — 설계 문서
 ```
 
