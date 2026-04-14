@@ -205,4 +205,4 @@ tests/e2e/
 - Runtime Validation은 `runtime/validator`로 분리해야 이후 DB 정합성, 성능, multi-step behaviour probe를 붙이기 쉽다.
 - Agent Framework 전용 객체 타입과 설정은 `app/worker`와 `runtime/*` 근처에 두고, `core/*`에는 직접 퍼뜨리지 않는다.
 - `tests/replay/`는 이 프로젝트의 성격상 중요하다. 단순 unit test보다 실제 event bundle replay가 더 많은 가치를 준다.
-- GitHub App manifest, ChatOps app 설정 등 설치 매니페스트는 별도 `infra/` 폴더를 두지 않고 `app/cli`가 참조하는 리소스로 관리한다. 설치 = CLI가 전부 책임지는 구조.
+- GitHub App manifest, ChatOps app 설정 등 설치 매니페스트는 `app/cli`가 참조하는 리소스로 관리한다. 설치 = CLI가 전부 책임지는 구조.
