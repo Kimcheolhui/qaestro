@@ -4,17 +4,17 @@ How to decide who handles what for devclaw.
 
 ## Routing Table
 
-| Work Type                                 | Route To | Examples                                                                                 |
-| ----------------------------------------- | -------- | ---------------------------------------------------------------------------------------- |
-| Architecture and scope                    | Morpheus | Module boundaries, phased delivery, ADRs, issue triage, reviewer gating                  |
-| Event ingestion and orchestration         | Trinity  | GitHub or chat webhooks, connector handoffs, worker wiring, context correlation          |
-| Behaviour analysis and strategy           | Neo      | Contracts, diff analysis, risk classification, checklist generation, strategy outputs    |
-| Validation, knowledge, and replay quality | Oracle   | Validation plans, runtime probes, knowledge-store patterns, replay and regression design |
-| Platform, infra, and operations           | Tank     | Self-hosted deployment, CI wiring, GitHub App ops, ChatOps setup, storage provisioning   |
-| Code review                               | Morpheus | Cross-layer review, dependency direction checks, architectural risk review               |
-| Testing                                   | Oracle   | Validation evidence, replay fixtures, regression coverage, false-positive control        |
-| Scope and priorities                      | Morpheus | MVP cuts, backlog ordering, trade-off calls                                              |
-| Session logging                           | Scribe   | Automatic - never needs routing                                                          |
+| Work Type                                 | Route To | Examples                                                                                    |
+| ----------------------------------------- | -------- | ------------------------------------------------------------------------------------------- |
+| Architecture and scope                    | Morpheus | Module boundaries, phased delivery, ADRs, issue triage, reviewer gating                     |
+| Event ingestion and orchestration         | Trinity  | GitHub or chat webhooks, connector handoffs, worker wiring, context correlation             |
+| Behaviour analysis and strategy           | Neo      | Contracts, diff analysis, risk classification, checklist generation, strategy outputs       |
+| Validation, knowledge, and replay quality | Oracle   | Validation plans, runtime probes, knowledge-store patterns, replay and regression design    |
+| Platform and operations                   | Tank     | Self-hosted deployment, CI wiring, GitHub App manifest, ChatOps setup, local storage config |
+| Code review                               | Morpheus | Cross-layer review, dependency direction checks, architectural risk review                  |
+| Testing                                   | Oracle   | Validation evidence, replay fixtures, regression coverage, false-positive control           |
+| Scope and priorities                      | Morpheus | MVP cuts, backlog ordering, trade-off calls                                                 |
+| Session logging                           | Scribe   | Automatic - never needs routing                                                             |
 
 ## Issue Routing
 

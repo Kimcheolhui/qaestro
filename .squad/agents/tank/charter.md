@@ -11,9 +11,9 @@
 
 ## What I Own
 
-- `infra/`, environment setup, and operational workflows around `uv`
-- CI wiring, deployment checklists, observability, and storage provisioning paths
-- GitHub App, ChatOps, and runtime hosting concerns outside the core domain logic
+- `app/cli` install manifests (GitHub App, ChatOps), environment setup, and operational workflows around `uv`
+- CI wiring, deployment checklists, observability, and storage configuration
+- Self-hosted runtime hosting concerns outside the core domain logic
 
 ## How I Work
 

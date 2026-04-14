@@ -9,7 +9,7 @@ src/            — 단일 Python 코드 루트. 아래 그룹으로 구성
   app/          — 진입점 계층
     gateway/    — webhook 수신, 이벤트 normalize
     worker/     — background job 실행
-    cli/        — 설치, 설정, 로컬 점검
+    cli/        — 설치, 설정, 로컬 점검, 설치 매니페스트
   core/         — 도메인 판단 계층
     contracts/  — 공통 이벤트, 도메인 타입
     analyzer/   — diff 분석, 영향 범위, 리스크 분류
@@ -24,7 +24,6 @@ src/            — 단일 Python 코드 루트. 아래 그룹으로 구성
     knowledge/  — knowledge backing store adapter
   shared/       — config, logger, tracing, util
 tests/          — fixtures, integration, e2e, replay
-infra/          — github-app, chatops, storage provisioning
 docs/           — 설계 문서
 ```
 
