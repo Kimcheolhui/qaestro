@@ -41,7 +41,7 @@ class TestAppConfig:
         cfg = load_config()
         try:
             cfg.debug = True  # type: ignore[misc]
-            assert False, "should be frozen"
+            raise AssertionError("should be frozen")
         except AttributeError:
             pass
 
@@ -52,7 +52,7 @@ class TestLogging:
     def test_get_logger_returns_logger(self) -> None:
         log = get_logger("test.module")
         assert isinstance(log, logging.Logger)
-        assert log.name == "test.module"
+        assert log.name == "devclaw.test.module"
 
     def test_setup_logging_json(self) -> None:
         setup_logging(level="WARNING", fmt="json")
