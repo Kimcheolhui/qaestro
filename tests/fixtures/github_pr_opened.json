@@ -1,0 +1,84 @@
+{
+  "action": "opened",
+  "number": 123,
+  "pull_request": {
+    "number": 123,
+    "title": "feat: add user authentication middleware",
+    "body": "This PR introduces JWT-based authentication middleware for the web API.\n\n## Changes\n- Added `auth_middleware.py` with token validation\n- Updated `app.py` to register the middleware\n- Added unit tests for token parsing\n\nCloses #42",
+    "state": "open",
+    "user": {
+      "login": "jane-dev",
+      "id": 12345,
+      "avatar_url": "https://avatars.githubusercontent.com/u/12345?v=4",
+      "type": "User"
+    },
+    "base": {
+      "ref": "main",
+      "sha": "abc123def456789",
+      "repo": {
+        "full_name": "acme-corp/web-api"
+      }
+    },
+    "head": {
+      "ref": "feat/auth-middleware",
+      "sha": "def789abc123456",
+      "repo": {
+        "full_name": "acme-corp/web-api"
+      }
+    },
+    "diff_url": "https://github.com/acme-corp/web-api/pull/123.diff",
+    "html_url": "https://github.com/acme-corp/web-api/pull/123",
+    "created_at": "2025-01-15T10:30:00Z",
+    "updated_at": "2025-01-15T10:30:00Z",
+    "mergeable": true,
+    "additions": 142,
+    "deletions": 3,
+    "changed_files": 3
+  },
+  "repository": {
+    "id": 999888,
+    "full_name": "acme-corp/web-api",
+    "name": "web-api",
+    "owner": {
+      "login": "acme-corp",
+      "id": 777666
+    },
+    "private": true,
+    "html_url": "https://github.com/acme-corp/web-api",
+    "default_branch": "main"
+  },
+  "sender": {
+    "login": "jane-dev",
+    "id": 12345,
+    "type": "User"
+  },
+  "files": [
+    {
+      "sha": "a1b2c3d4e5f6",
+      "filename": "src/middleware/auth_middleware.py",
+      "status": "added",
+      "additions": 95,
+      "deletions": 0,
+      "changes": 95,
+      "patch": "@@ -0,0 +1,95 @@\n+import jwt\n+from typing import Optional\n+\n+class AuthMiddleware:\n+    def __init__(self, secret: str):\n+        self.secret = secret"
+    },
+    {
+      "sha": "b2c3d4e5f6a1",
+      "filename": "src/app.py",
+      "status": "modified",
+      "additions": 12,
+      "deletions": 3,
+      "changes": 15,
+      "patch": "@@ -10,6 +10,15 @@\n from src.middleware.auth_middleware import AuthMiddleware\n+\n+app.add_middleware(AuthMiddleware(secret=config.JWT_SECRET))"
+    },
+    {
+      "sha": "c3d4e5f6a1b2",
+      "filename": "tests/test_auth_middleware.py",
+      "status": "added",
+      "additions": 35,
+      "deletions": 0,
+      "changes": 35,
+      "patch": "@@ -0,0 +1,35 @@\n+import pytest\n+from src.middleware.auth_middleware import AuthMiddleware"
+    }
+  ]
+}
