@@ -59,7 +59,14 @@ def setup_logging(
     root = logging.getLogger()
 
     # Remove existing handlers to allow re-configuration
-    root.handlers.clear()
+    for h in root.handlers[:]:
+        root.removeHandler(h)
+        h.close()
+
+    _VALID_FORMATS = ("json", "text")
+    if fmt not in _VALID_FORMATS:
+        msg = f"Unsupported log format {fmt!r}, expected one of {_VALID_FORMATS}"
+        raise ValueError(msg)
 
     handler = logging.StreamHandler(stream or sys.stderr)
     if fmt == "json":
@@ -68,7 +75,11 @@ def setup_logging(
         handler.setFormatter(_TextFormatter())
 
     root.addHandler(handler)
-    root.setLevel(getattr(logging, level.upper(), logging.INFO))
+    numeric_level = getattr(logging, level.upper(), None)
+    if not isinstance(numeric_level, int):
+        msg = f"Invalid log level {level!r}"
+        raise ValueError(msg)
+    root.setLevel(numeric_level)
 
 
 def get_logger(name: str) -> logging.Logger:

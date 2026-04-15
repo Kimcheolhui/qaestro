@@ -76,7 +76,11 @@ def load_config() -> AppConfig:
         if converter is bool:
             overrides[field_name] = _parse_bool(raw)
         elif converter is int:
-            overrides[field_name] = int(raw)
+            try:
+                overrides[field_name] = int(raw)
+            except ValueError:
+                msg = f"Invalid integer value for {env_key}: {raw!r}"
+                raise ValueError(msg) from None
         else:
             overrides[field_name] = raw
 
