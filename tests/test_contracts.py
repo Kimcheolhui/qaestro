@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 import pytest
 
 from src.core.contracts.domain import (
+    ActionType,
     BehaviourImpact,
     ImpactArea,
     QAReport,
@@ -26,9 +27,11 @@ from src.core.contracts.events import (
     CICompleted,
     Event,
     EventMeta,
+    EventSource,
     EventType,
     FileChange,
     PRCommented,
+    PREvent,
     PROpened,
     PRReviewed,
     PRUpdated,
@@ -45,7 +48,7 @@ def _make_meta(event_type: EventType = EventType.PR_OPENED) -> EventMeta:
         event_type=event_type,
         correlation_id="corr-001",
         timestamp=datetime(2025, 1, 15, 10, 30, 0, tzinfo=UTC),
-        source="github",
+        source=EventSource.GITHUB,
     )
 
 
@@ -74,6 +77,25 @@ class TestEventTypeEnum:
 
 
 # ---------------------------------------------------------------------------
+# EventSource enum
+# ---------------------------------------------------------------------------
+
+
+class TestEventSourceEnum:
+    """EventSource enum — constrained source origins."""
+
+    def test_values(self):
+        assert EventSource.GITHUB.value == "github"
+        assert EventSource.SLACK.value == "slack"
+        assert EventSource.TEAMS.value == "teams"
+        assert EventSource.REPLAY.value == "replay"
+
+    def test_unknown_source_raises(self):
+        with pytest.raises(ValueError):
+            EventSource("gitlab")
+
+
+# ---------------------------------------------------------------------------
 # EventMeta
 # ---------------------------------------------------------------------------
 
@@ -86,7 +108,7 @@ class TestEventMeta:
         assert meta.event_id == "evt-001"
         assert meta.event_type == EventType.PR_OPENED
         assert meta.correlation_id == "corr-001"
-        assert meta.source == "github"
+        assert meta.source == EventSource.GITHUB
 
     def test_frozen(self):
         meta = _make_meta()
@@ -106,7 +128,20 @@ class TestFileChange:
         fc = FileChange(path="src/main.py", status="modified")
         assert fc.additions == 0
         assert fc.deletions == 0
-        assert fc.patch == ""
+        assert fc.previous_filename == ""
+
+    def test_renamed_carries_previous_filename(self):
+        fc = FileChange(
+            path="src/new_name.py",
+            status="renamed",
+            previous_filename="src/old_name.py",
+        )
+        assert fc.previous_filename == "src/old_name.py"
+
+    def test_no_patch_field(self):
+        """Ensure FileChange stays lightweight — patch text is not carried."""
+        fields = {f.name for f in dataclasses.fields(FileChange)}
+        assert "patch" not in fields
 
     def test_frozen(self):
         fc = FileChange(path="a.py", status="added")
@@ -117,6 +152,52 @@ class TestFileChange:
 # ---------------------------------------------------------------------------
 # PR events
 # ---------------------------------------------------------------------------
+
+
+class TestPREventInheritance:
+    """PROpened and PRUpdated share the PREvent base."""
+
+    def test_pr_opened_is_pr_event(self):
+        pr = PROpened(
+            meta=_make_meta(),
+            repo_full_name="o/r",
+            pr_number=1,
+            title="t",
+            body="",
+            author="a",
+            base_branch="main",
+            head_branch="dev",
+            diff_url="",
+        )
+        assert isinstance(pr, PREvent)
+
+    def test_pr_updated_is_pr_event(self):
+        pr = PRUpdated(
+            meta=_make_meta(EventType.PR_UPDATED),
+            repo_full_name="o/r",
+            pr_number=1,
+            title="t",
+            body="",
+            author="a",
+            base_branch="main",
+            head_branch="dev",
+            diff_url="",
+        )
+        assert isinstance(pr, PREvent)
+
+    def test_distinct_types(self):
+        po = PROpened(
+            meta=_make_meta(),
+            repo_full_name="o/r",
+            pr_number=1,
+            title="t",
+            body="",
+            author="a",
+            base_branch="main",
+            head_branch="dev",
+            diff_url="",
+        )
+        assert not isinstance(po, PRUpdated)
 
 
 class TestPROpened:
@@ -340,6 +421,25 @@ class TestRiskLevel:
         assert len(RiskLevel) == 4
 
 
+class TestActionType:
+    """ActionType enum — known categories plus CUSTOM escape hatch."""
+
+    def test_known_values(self):
+        assert ActionType.RUN_TESTS.value == "run_tests"
+        assert ActionType.RUN_LINTER.value == "run_linter"
+        assert ActionType.TYPE_CHECK.value == "type_check"
+        assert ActionType.CHECK_SECURITY.value == "check_security"
+        assert ActionType.VERIFY_API_CONTRACT.value == "verify_api_contract"
+        assert ActionType.SMOKE_TEST.value == "smoke_test"
+
+    def test_custom_escape_hatch(self):
+        assert ActionType.CUSTOM.value == "custom"
+
+    def test_unknown_value_raises(self):
+        with pytest.raises(ValueError):
+            ActionType("not_a_real_action")
+
+
 class TestValidationOutcome:
     """ValidationOutcome enum."""
 
@@ -381,12 +481,23 @@ class TestBehaviourImpact:
 
 
 class TestStrategyAction:
-    """StrategyAction defaults."""
+    """StrategyAction defaults and ActionType usage."""
 
     def test_defaults(self):
-        sa = StrategyAction(action_type="test", description="Run unit tests", target="tests/")
+        sa = StrategyAction(action_type=ActionType.RUN_TESTS, description="Run unit tests", target="tests/")
         assert sa.priority == 0
         assert sa.rationale == ""
+        assert sa.action_type is ActionType.RUN_TESTS
+
+    def test_custom_action(self):
+        """CUSTOM is a valid escape hatch for engine-proposed novel actions."""
+        sa = StrategyAction(
+            action_type=ActionType.CUSTOM,
+            description="Run a custom migration-safety probe",
+            target="scripts/check_migration.py",
+            rationale="DB schema change detected; no standard action fits",
+        )
+        assert sa.action_type is ActionType.CUSTOM
 
 
 class TestStrategyResult:
@@ -401,7 +512,7 @@ class TestValidationResult:
     """ValidationResult defaults."""
 
     def test_defaults(self):
-        action = StrategyAction(action_type="test", description="d", target="t")
+        action = StrategyAction(action_type=ActionType.RUN_TESTS, description="d", target="t")
         vr = ValidationResult(action=action, outcome=ValidationOutcome.PASS)
         assert vr.details == ""
         assert vr.duration_seconds == 0.0
@@ -414,7 +525,11 @@ class TestQAReport:
     def test_full_report(self):
         area = ImpactArea(module="auth", description="Auth changes", risk_level=RiskLevel.HIGH)
         impact = BehaviourImpact(summary="Auth middleware added", areas=(area,), overall_risk=RiskLevel.HIGH)
-        action = StrategyAction(action_type="test", description="Run auth tests", target="tests/test_auth.py")
+        action = StrategyAction(
+            action_type=ActionType.RUN_TESTS,
+            description="Run auth tests",
+            target="tests/test_auth.py",
+        )
         strategy = StrategyResult(actions=(action,), reasoning="New auth code needs testing", confidence=0.9)
         validation = ValidationResult(action=action, outcome=ValidationOutcome.PASS, duration_seconds=1.5)
         report = QAReport(

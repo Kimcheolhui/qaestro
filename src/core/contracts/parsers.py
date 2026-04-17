@@ -2,6 +2,16 @@
 
 Each parser is tolerant of missing fields, falling back to sensible defaults
 so that incomplete or evolving webhook schemas don't cause hard failures.
+
+These parsers intentionally produce **lightweight** events:
+
+* ``FileChange`` carries only per-file metadata (path, status, line counts).
+  Actual diff text and file contents are NOT attached — they are fetched
+  on-demand by the Step 2 fetch layer.
+* ``CICompleted.failed_jobs`` is populated from a synthetic ``failed_jobs``
+  key if present (used by test fixtures).  In production the real
+  ``workflow_run`` webhook has no such field; the fetch layer must
+  enrich the event from ``GET /repos/.../actions/runs/{id}/jobs``.
 """
 
 from __future__ import annotations
@@ -10,9 +20,10 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from src.core.contracts.events import (
+from .events import (
     CICompleted,
     EventMeta,
+    EventSource,
     EventType,
     FileChange,
     PRCommented,
@@ -34,14 +45,20 @@ def _get(d: dict[str, Any], *keys: str, default: Any = "") -> Any:
 
 
 def _parse_files(files: list[dict[str, Any]]) -> tuple[FileChange, ...]:
-    """Convert a list of GitHub file-change dicts to FileChange tuples."""
+    """Convert a list of GitHub file-change dicts to FileChange tuples.
+
+    Note: real ``pull_request`` webhook payloads don't include this array —
+    it must be fetched separately. Parsers accept it here so test fixtures
+    and the future fetch layer can feed pre-enriched payloads through the
+    same code path.
+    """
     return tuple(
         FileChange(
             path=f.get("filename", ""),
             status=f.get("status", "modified"),
             additions=int(f.get("additions", 0)),
             deletions=int(f.get("deletions", 0)),
-            patch=f.get("patch", ""),
+            previous_filename=f.get("previous_filename", "") or "",
         )
         for f in files
     )
@@ -83,7 +100,7 @@ def parse_github_pr_event(
         event_type=event_type,
         correlation_id=correlation_id,
         timestamp=_now(),
-        source="github",
+        source=EventSource.GITHUB,
     )
 
     files_raw: list[dict[str, Any]] = payload.get("files", [])
@@ -129,7 +146,7 @@ def parse_github_ci_event(
 
     # Determine associated PR number (if any)
     pr_numbers: list[dict[str, Any]] = wf.get("pull_requests", [])
-    pr_number: int | None = int(pr_numbers[0]["number"]) if pr_numbers else None
+    pr_number: int | None = int(pr_numbers[0].get("number", 0)) if pr_numbers else None
 
     failed_jobs: list[str] = [j.get("name", "") for j in payload.get("failed_jobs", []) if j.get("name")]
 
@@ -138,7 +155,7 @@ def parse_github_ci_event(
         event_type=EventType.CI_COMPLETED,
         correlation_id=correlation_id,
         timestamp=_now(),
-        source="github",
+        source=EventSource.GITHUB,
     )
 
     return CICompleted(
@@ -177,7 +194,7 @@ def parse_github_pr_review_event(
         event_type=EventType.PR_REVIEWED,
         correlation_id=correlation_id,
         timestamp=_now(),
-        source="github",
+        source=EventSource.GITHUB,
     )
 
     return PRReviewed(
@@ -203,12 +220,26 @@ def parse_github_comment_event(
     comment: dict[str, Any] = payload.get("comment", {})
     repo: dict[str, Any] = payload.get("repository", {})
 
-    # Determine PR number — either from pull_request or issue
+    # Determine PR number — distinguish between PR comments and issue comments.
+    # GitHub's ``issue_comment`` webhook fires for BOTH issues and PRs.  We only
+    # want to emit ``PRCommented`` for actual PR conversations; plain-issue
+    # comments are out of scope for devclaw and must be dropped.
+    #
+    # Disambiguation rules:
+    # * ``payload["pull_request"]`` present  → PR review-comment payload
+    # * ``payload["issue"]["pull_request"]`` present → issue_comment on a PR
+    #   (GitHub injects this nested object when the issue is a PR)
+    # * otherwise the comment belongs to a plain issue — return ``None``
     pr_number = 0
     if "pull_request" in payload:
         pr_number = int(payload["pull_request"].get("number", 0))
     elif "issue" in payload:
-        pr_number = int(payload["issue"].get("number", 0))
+        issue: dict[str, Any] = payload.get("issue", {})
+        if not issue.get("pull_request"):
+            return None
+        pr_number = int(issue.get("number", 0))
+    else:
+        return None
 
     if not comment:
         return None
@@ -220,8 +251,11 @@ def parse_github_comment_event(
         event_type=EventType.PR_COMMENTED,
         correlation_id=correlation_id,
         timestamp=_now(),
-        source="github",
+        source=EventSource.GITHUB,
     )
+
+    raw_line = comment.get("line")
+    line: int | None = int(raw_line) if raw_line is not None else None
 
     return PRCommented(
         meta=meta,
@@ -232,5 +266,5 @@ def parse_github_comment_event(
         body=comment.get("body", "") or "",
         is_review_comment=is_review_comment,
         path=comment.get("path", "") or "",
-        line=comment.get("line"),
+        line=line,
     )

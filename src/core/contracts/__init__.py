@@ -7,7 +7,8 @@ This package re-exports every public type so consumers can write::
 
 from __future__ import annotations
 
-from src.core.contracts.domain import (
+from .domain import (
+    ActionType,
     BehaviourImpact,
     ImpactArea,
     QAReport,
@@ -17,19 +18,21 @@ from src.core.contracts.domain import (
     ValidationOutcome,
     ValidationResult,
 )
-from src.core.contracts.events import (
+from .events import (
     ChatMention,
     CICompleted,
     Event,
     EventMeta,
+    EventSource,
     EventType,
     FileChange,
     PRCommented,
+    PREvent,
     PROpened,
     PRReviewed,
     PRUpdated,
 )
-from src.core.contracts.parsers import (
+from .parsers import (
     parse_github_ci_event,
     parse_github_comment_event,
     parse_github_pr_event,
@@ -37,15 +40,18 @@ from src.core.contracts.parsers import (
 )
 
 __all__ = [
+    "ActionType",
     "BehaviourImpact",
     "CICompleted",
     "ChatMention",
     "Event",
     "EventMeta",
+    "EventSource",
     "EventType",
     "FileChange",
     "ImpactArea",
     "PRCommented",
+    "PREvent",
     "PROpened",
     "PRReviewed",
     "PRUpdated",

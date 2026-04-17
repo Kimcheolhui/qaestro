@@ -77,7 +77,7 @@ devclaw를 구현할 때 참고할 수 있는 모듈 단위 요구사항 문서.
 
 **필수 요구사항**
 
-- `PROpened`, `PRCommented`, `PRReviewed`, `CICompleted`, `ChatMention` 이벤트 타입 정의
+- `PROpened`, `PRUpdated`, `PRCommented`, `PRReviewed`, `CICompleted`, `ChatMention` 이벤트 타입 정의
 - risk level, validation result, strategy result, renderer payload를 위한 기본 타입 정의
 - provider별 payload가 아니라 시스템 내부 표준 타입을 기준으로 삼을 것
 
