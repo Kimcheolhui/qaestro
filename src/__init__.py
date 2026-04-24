@@ -1,1 +1,1 @@
-"""devclaw — Embedded QA Agent for Agentic Development Environments."""
+"""qaestro — Embedded QA Agent for Agentic Development Environments."""

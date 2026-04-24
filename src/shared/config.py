@@ -15,7 +15,7 @@ from typing import Any
 class AppConfig:
     """Top-level application configuration.
 
-    All values come from environment variables with ``DEVCLAW_`` prefix.
+    All values come from environment variables with ``QAESTRO_`` prefix.
     Defaults are suitable for local development.
     """
 
@@ -37,7 +37,7 @@ class AppConfig:
     features: dict[str, bool] = field(default_factory=dict)
 
 
-_ENV_PREFIX = "DEVCLAW_"
+_ENV_PREFIX = "QAESTRO_"
 
 # Mapping: config field name → (env var suffix, type converter)
 _ENV_MAP: dict[str, tuple[str, type[Any]]] = {
@@ -60,7 +60,7 @@ def _parse_bool(value: str) -> bool:
 def load_config() -> AppConfig:
     """Build an :class:`AppConfig` from environment variables.
 
-    Environment variable names follow the pattern ``DEVCLAW_<SUFFIX>``
+    Environment variable names follow the pattern ``QAESTRO_<SUFFIX>``
     where *SUFFIX* is the uppercase field name (see ``_ENV_MAP``).
 
     Returns a frozen dataclass — immutable after creation.

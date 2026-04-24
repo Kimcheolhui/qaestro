@@ -1,6 +1,6 @@
 # Project Structure
 
-devclaw 구현을 위한 레포 구조. 아키텍처 레이어(Event Ingestion → Behaviour Analyzer → Strategy Engine → Runtime Validation → Output)를 실제 폴더 구조로 매핑한다.
+qaestro 구현을 위한 레포 구조. 아키텍처 레이어(Event Ingestion → Behaviour Analyzer → Strategy Engine → Runtime Validation → Output)를 실제 폴더 구조로 매핑한다.
 
 코드 루트는 `src/`로 두고, 그 아래를 `app`, `core`, `runtime`, `adapters`, `shared`로 묶어 책임별로 구분한다. 서브모듈 간 경계는 디렉터리 구조와 import 규약으로 유지한다.
 
@@ -151,7 +151,7 @@ adapters.knowledge  → core.knowledge, shared
 
 ## Bounded Autonomy
 
-devclaw는 자유롭게 모든 것을 실행하는 agent가 아니라, 정해진 가이드라인과 권한 범위 안에서 자율적으로 동작하는 QA Agent를 목표로 한다.
+qaestro는 자유롭게 모든 것을 실행하는 agent가 아니라, 정해진 가이드라인과 권한 범위 안에서 자율적으로 동작하는 QA Agent를 목표로 한다.
 
 이 관점은 그룹 구조에도 반영된다.
 

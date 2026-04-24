@@ -223,7 +223,7 @@ def parse_github_comment_event(
     # Determine PR number — distinguish between PR comments and issue comments.
     # GitHub's ``issue_comment`` webhook fires for BOTH issues and PRs.  We only
     # want to emit ``PRCommented`` for actual PR conversations; plain-issue
-    # comments are out of scope for devclaw and must be dropped.
+    # comments are out of scope for qaestro and must be dropped.
     #
     # Disambiguation rules:
     # * ``payload["pull_request"]`` present  → PR review-comment payload

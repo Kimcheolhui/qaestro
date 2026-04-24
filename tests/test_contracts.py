@@ -365,7 +365,7 @@ class TestChatMention:
             channel_id="C123",
             channel_name="engineering",
             author="eve",
-            message="@devclaw check PR 42",
+            message="@qaestro check PR 42",
         )
         assert cm.thread_id == ""
         assert cm.referenced_pr is None

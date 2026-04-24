@@ -1,4 +1,4 @@
-# devclaw
+# qaestro
 
 **Embedded QA Agent for Agentic Development Environments**
 
@@ -44,7 +44,7 @@ Agentic 개발 환경(ChatOps + PR + CI Loop)에 참여하여, Repository의 변
 
 ### 1. Development Phase
 
-- 개발자가 Slack/Teams 협업 채널에서 `@devclaw` 태그 시, 쓰레드 전체를 읽고 변경 의도 파악
+- 개발자가 Slack/Teams 협업 채널에서 `@qaestro` 태그 시, 쓰레드 전체를 읽고 변경 의도 파악
 - QA Risk 논의 참여, Validation 전략 제안
 
 ### 2. CI Phase

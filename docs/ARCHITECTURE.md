@@ -1,6 +1,6 @@
 # Architecture
 
-컴포넌트 간 Integration 구조 설계. (ref: [#1](https://github.com/Kimcheolhui/devclaw/issues/1), [#3](https://github.com/Kimcheolhui/devclaw/issues/3))
+컴포넌트 간 Integration 구조 설계. (ref: [#1](https://github.com/Kimcheolhui/qaestro/issues/1), [#3](https://github.com/Kimcheolhui/qaestro/issues/3))
 
 물리적 레포 구조는 [PROJECT_STRUCTURE.md](./PROJECT_STRUCTURE.md) 참고.
 
@@ -32,11 +32,11 @@ flowchart TB
         CHAT_OUT["Slack/Teams 메시지<br/>(대화형 응답)"]
     end
 
-    DEV -->|"논의 후 @devclaw 태그"| CHAT
+    DEV -->|"논의 후 @qaestro 태그"| CHAT
     DEV -->|"PR 생성"| GH
 
     GH -->|"PROpened / PRCommented /<br/> PRReviewed / CICompleted"| EI
-    CHAT -->|"ChatMention<br/>(@devclaw 태그 시 쓰레드 전체 수집)"| EI
+    CHAT -->|"ChatMention<br/>(@qaestro 태그 시 쓰레드 전체 수집)"| EI
 
     EI -->|"맥락 묶기<br/>(여러 Sources를 <br/>동일 컨텍스트로 연결)"| BA
 
@@ -75,7 +75,7 @@ ChatMention { meta: EventMeta, platform, channel_id, channel_name, author, messa
 
 `FileChange`는 경량 메타데이터(`path`, `status`, `additions`, `deletions`, `previous_filename`)만 보유. 실제 diff 텍스트와 파일 내용은 이벤트에 싣지 않고, runtime에서 별도 fetch 레이어(`GET /repos/{owner}/{repo}/pulls/{number}/files` 등)로 조회한다. 이벤트가 작을수록 queue·persist·replay 비용이 낮아지기 때문.
 
-`ChatMention`은 개발자가 `@devclaw`를 태그했을 때 발생. 쓰레드 전체를 읽고 변경 의도/맥락을 파악하며, 태그 시 요약 메시지가 함께 있으면 보조 맥락으로 활용한다.
+`ChatMention`은 개발자가 `@qaestro`를 태그했을 때 발생. 쓰레드 전체를 읽고 변경 의도/맥락을 파악하며, 태그 시 요약 메시지가 함께 있으면 보조 맥락으로 활용한다.
 
 Agent가 채널을 상시 모니터링하지 않음. 개발자가 필요할 때 호출하는 방식.
 

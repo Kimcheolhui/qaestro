@@ -1,4 +1,4 @@
-"""Domain types for devclaw's core analysis pipeline.
+"""Domain types for qaestro's core analysis pipeline.
 
 These types represent the outputs of the Behaviour Analyzer, Strategy Engine,
 Validator, and the final QA Report.
@@ -50,7 +50,7 @@ class ImpactArea:
 
     ``module`` refers to a logical module of the **target project being
     analysed** (e.g. ``"auth"``, ``"payments"``, ``"api.v2"``) — not to
-    devclaw's own internal modules.  The Behaviour Analyzer is responsible
+    qaestro's own internal modules.  The Behaviour Analyzer is responsible
     for mapping changed file paths to module names; when the target
     project lacks a stable module taxonomy (or renames modules), the
     Analyzer should fall back to directory-prefix names or file paths.

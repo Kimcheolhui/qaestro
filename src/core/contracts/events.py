@@ -1,4 +1,4 @@
-"""Event types for devclaw's event-driven architecture.
+"""Event types for qaestro's event-driven architecture.
 
 All events are frozen dataclasses representing normalized webhook payloads
 from GitHub, Slack, Teams, and other integration sources.

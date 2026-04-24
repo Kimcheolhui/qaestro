@@ -1,4 +1,4 @@
-# devclaw — Copilot Instructions
+# qaestro — Copilot Instructions
 
 Embedded QA Agent for Agentic Development Environments. 단일 Python 코드 루트.
 
