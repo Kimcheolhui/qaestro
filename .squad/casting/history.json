@@ -2,12 +2,12 @@
   "universe_usage_history": [
     {
       "universe": "The Matrix",
-      "assignment_id": "2026-04-14-devclaw-initial-cast",
+      "assignment_id": "2026-04-14-qaestro-initial-cast",
       "used_at": "2026-04-14T07:47:53+00:00"
     }
   ],
   "assignment_cast_snapshots": {
-    "2026-04-14-devclaw-initial-cast": {
+    "2026-04-14-qaestro-initial-cast": {
       "universe": "The Matrix",
       "agents": {
         "lead-architect": "Morpheus",

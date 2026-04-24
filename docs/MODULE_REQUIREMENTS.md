@@ -1,6 +1,6 @@
 # Module Requirements
 
-devclaw를 구현할 때 참고할 수 있는 모듈 단위 요구사항 문서.
+qaestro를 구현할 때 참고할 수 있는 모듈 단위 요구사항 문서.
 
 이 문서는 상세 구현 문서가 아니라, 각 모듈이 무엇을 책임지고 어떤 수준까지 먼저 만들어야 하는지를 정리한다.
 
@@ -540,7 +540,7 @@ devclaw를 구현할 때 참고할 수 있는 모듈 단위 요구사항 문서.
 | 3    | GitHub PR 분석 vertical slice     | `core/analyzer`, `core/strategy`, `core/knowledge`(interface+mock), `adapters/renderers`                 | PR 오픈 시 Behaviour Impact Report 자동 생성                    |
 | 4    | CI 결과 피드백 루프               | `runtime/orchestrator`, `core/strategy`, `adapters/renderers`                                            | CI 실패를 PR 맥락에 엮어 설명 가능                              |
 | 5    | Runtime Validation MVP            | `runtime/validator`, Microsoft Agent Framework 연결                                                      | 선택된 PR에 대해 runtime validation 실행 및 결과 반영           |
-| 6    | ChatOps 흐름 연결                 | `app/gateway`(chat), `adapters/connectors`(ChatOps), `adapters/renderers`                                | `@devclaw` 호출 시 전략 제안, PR 맥락과 연결                    |
+| 6    | ChatOps 흐름 연결                 | `app/gateway`(chat), `adapters/connectors`(ChatOps), `adapters/renderers`                                | `@qaestro` 호출 시 전략 제안, PR 맥락과 연결                    |
 | 7    | Knowledge Store 실 adapter 적용   | `adapters/knowledge`, `core/strategy`                                                                    | 실제 backing store 연결, 과거 패턴 조회 가능, adapter 교체 가능 |
 | 8    | CLI와 self-hosted 설치 흐름       | `app/cli`                                                                                                | repo 소스 이해 없이 CLI로 설치/실행 가능                        |
 | 9    | 운영 안정화 및 베타 준비          | telemetry, permission, 문서                                                                              | 내부 dogfooding 또는 design partner 테스트 가능                 |

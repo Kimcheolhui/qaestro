@@ -6,7 +6,7 @@ active_issues: []
 
 # What We're Focused On
 
-Building the first end-to-end devclaw loop:
+Building the first end-to-end qaestro loop:
 
 GitHub or chat events -> normalized contracts -> orchestration -> behaviour analysis -> validation strategy -> runtime validation -> rendered QA output.
 

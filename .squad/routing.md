@@ -1,6 +1,6 @@
 # Work Routing
 
-How to decide who handles what for devclaw.
+How to decide who handles what for qaestro.
 
 ## Routing Table
 
@@ -33,7 +33,7 @@ How to decide who handles what for devclaw.
 ## Rules
 
 1. **Eager by default** — spawn all agents who could usefully start work, including anticipatory downstream work.
-2. **Route by architecture boundary first.** devclaw is not a frontend-heavy product, so prefer system ownership over generic app roles.
+2. **Route by architecture boundary first.** qaestro is not a frontend-heavy product, so prefer system ownership over generic app roles.
 3. **Scribe always runs** after substantial work, always as `mode: "background"`. Never blocks.
 4. **Quick facts -> coordinator answers directly.** Don't spawn an agent for "what port does the server run on?"
 5. **When a task crosses 3 or more layers, bring in Morpheus plus the primary owner.** The lead keeps seams explicit before implementation fans out.

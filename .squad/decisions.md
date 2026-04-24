@@ -8,7 +8,7 @@
 
 **What:** The initial squad is organized around lead architecture, runtime integration, behaviour strategy, validation and knowledge, and platform operations instead of a frontend or backend split.
 
-**Why:** devclaw is a self-hosted embedded QA agent platform. Its highest delivery risk is in event orchestration, analysis quality, validation signal quality, and operational reliability across chat, PR, and CI loops.
+**Why:** qaestro is a self-hosted embedded QA agent platform. Its highest delivery risk is in event orchestration, analysis quality, validation signal quality, and operational reliability across chat, PR, and CI loops.
 
 ## Governance
 

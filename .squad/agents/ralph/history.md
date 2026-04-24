@@ -1,6 +1,6 @@
 # Project Context
 
-- **Project:** devclaw
+- **Project:** qaestro
 - **Owner:** Kimcheolhui
 - **Stack:** Python, uv, Microsoft Agent Framework, GitHub App, Slack/Teams connectors, self-hosted, BYOK
 - **Created:** 2026-04-14

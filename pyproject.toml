@@ -1,5 +1,5 @@
 [project]
-name = "devclaw"
+name = "qaestro"
 version = "0.1.0"
 description = "Embedded QA Agent for Agentic Development Environments"
 readme = "README.md"
@@ -8,8 +8,8 @@ requires-python = ">=3.12"
 dependencies = []
 
 [project.scripts]
-devclaw-gateway = "src.app.gateway:main"
-devclaw-worker = "src.app.worker:main"
+qaestro-gateway = "src.app.gateway:main"
+qaestro-worker = "src.app.worker:main"
 
 [build-system]
 requires = ["hatchling"]

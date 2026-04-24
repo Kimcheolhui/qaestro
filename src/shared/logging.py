@@ -83,5 +83,5 @@ def setup_logging(
 
 
 def get_logger(name: str) -> logging.Logger:
-    """Return a named logger scoped under ``devclaw.``."""
-    return logging.getLogger(f"devclaw.{name}")
+    """Return a named logger scoped under ``qaestro.``."""
+    return logging.getLogger(f"qaestro.{name}")

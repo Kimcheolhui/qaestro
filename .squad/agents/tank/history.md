@@ -1,13 +1,13 @@
 # Project Context
 
-- **Project:** devclaw
+- **Project:** qaestro
 - **Owner:** Kimcheolhui
 - **Stack:** Python, uv, Microsoft Agent Framework, GitHub App, Slack/Teams connectors, self-hosted, BYOK
 - **Created:** 2026-04-14
 
 ## Core Context
 
-Tank owns self-hosted operations, CI, deployment, and infrastructure fit for the devclaw platform.
+Tank owns self-hosted operations, CI, deployment, and infrastructure fit for the qaestro platform.
 
 ## Recent Updates
 

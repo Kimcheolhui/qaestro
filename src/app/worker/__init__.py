@@ -1,6 +1,6 @@
 """Background job execution and Agent Framework runner host.
 
-Entry point for the ``devclaw-worker`` console script.
+Entry point for the ``qaestro-worker`` console script.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ logger = get_logger(__name__)
 def main() -> None:
     """Start the worker process."""
     setup_logging()
-    logger.info("devclaw-worker starting")
+    logger.info("qaestro-worker starting")
     # TODO(step-1): wire up actual task queue / runner
-    logger.info("devclaw-worker ready — no runner configured yet, exiting")
+    logger.info("qaestro-worker ready — no runner configured yet, exiting")
     sys.exit(0)

@@ -27,9 +27,9 @@ class TestAppConfig:
 
     def test_env_override(self) -> None:
         env = {
-            "DEVCLAW_DEBUG": "true",
-            "DEVCLAW_LOG_LEVEL": "DEBUG",
-            "DEVCLAW_LOG_FORMAT": "text",
+            "QAESTRO_DEBUG": "true",
+            "QAESTRO_LOG_LEVEL": "DEBUG",
+            "QAESTRO_LOG_FORMAT": "text",
         }
         with patch.dict(os.environ, env, clear=True):
             cfg = load_config()
@@ -52,7 +52,7 @@ class TestLogging:
     def test_get_logger_returns_logger(self) -> None:
         log = get_logger("test.module")
         assert isinstance(log, logging.Logger)
-        assert log.name == "devclaw.test.module"
+        assert log.name == "qaestro.test.module"
 
     def test_setup_logging_json(self) -> None:
         setup_logging(level="WARNING", fmt="json")
