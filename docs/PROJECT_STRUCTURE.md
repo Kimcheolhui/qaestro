@@ -122,7 +122,7 @@ adapters.knowledge  → core.knowledge, shared
 
 ### `core/`
 
-- `core/contracts`: `PROpened`, `PRCommented`, `PRReviewed`, `CICompleted`, `ChatMention` 같은 공통 이벤트 스키마와 domain type
+- `core/contracts`: `PROpened`, `PRUpdated`, `PRCommented`, `PRReviewed`, `CICompleted`, `ChatMention` 같은 공통 이벤트 스키마와 domain type
 - `core/analyzer`: diff 분석, 영향 범위 추정, 리스크 분류
 - `core/strategy`: Behaviour Checklist 생성, 검증 전략 선택, 누락 테스트 제안
 - `core/knowledge`: 고객 QA 지식 자산 접근을 위한 port, query model, in-memory mock

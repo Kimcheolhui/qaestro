@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import sys
 
-from src.shared import get_logger, setup_logging
+from ...shared import get_logger, setup_logging
 
 logger = get_logger(__name__)
 

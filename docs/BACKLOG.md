@@ -19,6 +19,15 @@
   - **전략 정밀도** — 범용 제안 → repo 히스토리 기반 맞춤 제안
   - **자율성 수준** — 제안만 → 테스트 코드 자동 생성/수정
 
+### PRClosed 이벤트
+
+- 현재 이벤트 스키마에 `PRClosed`가 없음 (`EventType`에도 해당 멤버 부재)
+- 필요해질 수 있는 시나리오:
+  - **merged vs closed 구분** (`action=closed` + `merged=true/false`) — merged PR의 QA 리포트를 Knowledge Store에 영구 저장할지 결정
+  - **진행 중 validation 취소** — PR이 닫히면 running job 중단, 임시 artifact 정리
+  - **correlation_id 수명 관리** — 종료 시점에 리소스 정리
+- 결정 보류: Step 2 orchestrator + Knowledge Store 설계가 확정된 뒤에 추가 (그 때 `merged: bool` 필드와 함께)
+
 ### MVP 성공 지표
 
 - Agent의 Risk 판단 정확도를 어떻게 측정할 것인지

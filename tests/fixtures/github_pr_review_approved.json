@@ -1,0 +1,53 @@
+{
+  "action": "submitted",
+  "review": {
+    "id": 7778889990,
+    "user": {
+      "login": "senior-reviewer",
+      "id": 67890,
+      "type": "User"
+    },
+    "body": "LGTM! The auth middleware looks solid. Nice handling of the token expiry edge case.",
+    "state": "approved",
+    "html_url": "https://github.com/acme-corp/web-api/pull/123#pullrequestreview-7778889990",
+    "submitted_at": "2025-01-15T14:00:00Z",
+    "commit_id": "fed321cba987654",
+    "author_association": "MEMBER"
+  },
+  "pull_request": {
+    "number": 123,
+    "title": "feat: add user authentication middleware",
+    "body": "This PR introduces JWT-based authentication middleware.",
+    "state": "open",
+    "user": {
+      "login": "jane-dev",
+      "id": 12345
+    },
+    "base": {
+      "ref": "main",
+      "sha": "abc123def456789"
+    },
+    "head": {
+      "ref": "feat/auth-middleware",
+      "sha": "fed321cba987654"
+    },
+    "html_url": "https://github.com/acme-corp/web-api/pull/123"
+  },
+  "repository": {
+    "id": 999888,
+    "full_name": "acme-corp/web-api",
+    "name": "web-api",
+    "owner": {
+      "login": "acme-corp",
+      "id": 777666
+    },
+    "private": true,
+    "html_url": "https://github.com/acme-corp/web-api",
+    "default_branch": "main"
+  },
+  "sender": {
+    "login": "senior-reviewer",
+    "id": 67890,
+    "type": "User"
+  }
+}

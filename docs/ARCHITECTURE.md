@@ -62,12 +62,18 @@ GitHub App, Slack/Teams는 서로 다른 trigger source. 이들을 공통 이벤
 **이벤트 타입:**
 
 ```
-PROpened { repo, diff, author, ... }
-PRCommented { repo, pr, author, body, ... }
-PRReviewed { repo, pr, reviewer, verdict, comments, ... }
-CICompleted { repo, pr, results, ... }
-ChatMention { channel, thread, mentionType, ... }
+PROpened    { meta: EventMeta, repo, pr_number, title, author, base_branch, head_branch,
+              diff_url, files_changed: [FileChange], ... }
+PRUpdated   { meta: EventMeta, repo, pr_number, ... }          # PROpened와 같은 필드 (synchronize/edited/reopened)
+PRCommented { meta: EventMeta, repo, pr_number, author, body, comment_id, ... }
+PRReviewed  { meta: EventMeta, repo, pr_number, reviewer, state, body, ... }   # state: approved/changes_requested/commented
+CICompleted { meta: EventMeta, repo, pr_number, commit_sha, conclusion, failed_jobs, ... }
+ChatMention { meta: EventMeta, platform, channel_id, channel_name, author, message, ... }
 ```
+
+모든 이벤트는 공통 `EventMeta`(`event_id`, `event_type`, `correlation_id`, `timestamp`, `source`)를 포함한다. 실제 계약의 repo 필드명은 `repo_full_name`이며, 위 표기는 개요 용도의 shorthand.
+
+`FileChange`는 경량 메타데이터(`path`, `status`, `additions`, `deletions`, `previous_filename`)만 보유. 실제 diff 텍스트와 파일 내용은 이벤트에 싣지 않고, runtime에서 별도 fetch 레이어(`GET /repos/{owner}/{repo}/pulls/{number}/files` 등)로 조회한다. 이벤트가 작을수록 queue·persist·replay 비용이 낮아지기 때문.
 
 `ChatMention`은 개발자가 `@devclaw`를 태그했을 때 발생. 쓰레드 전체를 읽고 변경 의도/맥락을 파악하며, 태그 시 요약 메시지가 함께 있으면 보조 맥락으로 활용한다.
 
