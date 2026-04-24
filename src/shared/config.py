@@ -30,6 +30,15 @@ class AppConfig:
     gateway_port: int = 8000
     github_webhook_secret: str = ""
 
+    # ── GitHub App auth ────────────────────────────────────────────
+    # App ID and installation ID issued by GitHub when the App is
+    # installed on a repository/org. ``private_key_path`` points to a
+    # PEM file on disk (not the PEM body itself) — keeps secrets out of
+    # environment variables and aligns with K8s secret-mount patterns.
+    github_app_id: int = 0
+    github_app_installation_id: int = 0
+    github_app_private_key_path: str = ""
+
     # ── Worker ─────────────────────────────────────────────────────
     worker_concurrency: int = 4
 
@@ -48,6 +57,9 @@ _ENV_MAP: dict[str, tuple[str, type[Any]]] = {
     "gateway_host": ("GATEWAY_HOST", str),
     "gateway_port": ("GATEWAY_PORT", int),
     "github_webhook_secret": ("GITHUB_WEBHOOK_SECRET", str),
+    "github_app_id": ("GITHUB_APP_ID", int),
+    "github_app_installation_id": ("GITHUB_APP_INSTALLATION_ID", int),
+    "github_app_private_key_path": ("GITHUB_APP_PRIVATE_KEY_PATH", str),
     "worker_concurrency": ("WORKER_CONCURRENCY", int),
 }
 
