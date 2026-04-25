@@ -1,21 +1,30 @@
 """Background job execution and Agent Framework runner host.
 
-Entry point for the ``qaestro-worker`` console script.
+Implementation lives in focused modules under this package. ``__init__`` only
+re-exports the public worker API and console-script entrypoint.
 """
 
 from __future__ import annotations
 
-import sys
+from ..jobs import EnqueueQueue, EventJob, InMemoryJobQueue, JobQueue
+from .entrypoint import main
+from .github import GitHubCommentPoster, GitHubIssueCommentClient
+from .runner import CommentPoster, NoopCommentPoster, Orchestrator, Worker
+from .types import WorkerExecution, WorkerExecutionContext, WorkerStatus
 
-from ...shared import get_logger, setup_logging
-
-logger = get_logger(__name__)
-
-
-def main() -> None:
-    """Start the worker process."""
-    setup_logging()
-    logger.info("qaestro-worker starting")
-    # TODO(step-1): wire up actual task queue / runner
-    logger.info("qaestro-worker ready — no runner configured yet, exiting")
-    sys.exit(0)
+__all__ = [
+    "CommentPoster",
+    "EnqueueQueue",
+    "EventJob",
+    "GitHubCommentPoster",
+    "GitHubIssueCommentClient",
+    "InMemoryJobQueue",
+    "JobQueue",
+    "NoopCommentPoster",
+    "Orchestrator",
+    "Worker",
+    "WorkerExecution",
+    "WorkerExecutionContext",
+    "WorkerStatus",
+    "main",
+]
