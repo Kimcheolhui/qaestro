@@ -5,7 +5,9 @@ description = "Embedded QA Agent for Agentic Development Environments"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "pyjwt[crypto]>=2.8",
+]
 
 [project.scripts]
 qaestro-gateway = "src.app.gateway:main"

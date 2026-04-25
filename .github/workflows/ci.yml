@@ -22,7 +22,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install dependencies
-        run: uv pip install --system ruff
+        run: uv pip install --system -e . ruff
       - name: Ruff check
         run: ruff check src/ tests/
       - name: Ruff format check
@@ -40,7 +40,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install dependencies
-        run: uv pip install --system mypy
+        run: uv pip install --system -e . mypy
       - name: Mypy
         run: mypy src/
 
@@ -59,6 +59,6 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
-        run: uv pip install --system pytest
+        run: uv pip install --system -e . pytest
       - name: Run tests
         run: pytest tests/ -v
