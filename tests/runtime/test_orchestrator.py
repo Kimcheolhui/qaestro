@@ -17,10 +17,14 @@ from src.core.contracts import (
     EventType,
     FileChange,
     ImpactArea,
+    PRCommented,
+    PREvent,
     PROpened,
+    PRReviewed,
     RiskLevel,
     StrategyAction,
     StrategyResult,
+    ValidationResult,
 )
 from src.runtime.orchestrator import (
     ChatWorkflowOrchestrator,
@@ -92,6 +96,28 @@ def _chat_mention_event() -> ChatMention:
     )
 
 
+def _pr_commented_event() -> PRCommented:
+    return PRCommented(
+        meta=_event_meta("evt-comment-001", EventType.PR_COMMENTED, "corr-comment-001"),
+        repo_full_name="Kimcheolhui/qaestro",
+        pr_number=31,
+        comment_id=1001,
+        author="Kimcheolhui",
+        body="Please check this PR.",
+    )
+
+
+def _pr_reviewed_event() -> PRReviewed:
+    return PRReviewed(
+        meta=_event_meta("evt-review-001", EventType.PR_REVIEWED, "corr-review-001"),
+        repo_full_name="Kimcheolhui/qaestro",
+        pr_number=31,
+        reviewer="Kimcheolhui",
+        state="commented",
+        body="Looks close.",
+    )
+
+
 def test_event_orchestrator_dispatches_pr_events_to_pr_sub_orchestrator():
     event = _pr_opened_event()
     orchestrator = EventOrchestrator()
@@ -119,6 +145,16 @@ def test_event_orchestrator_dispatches_ci_and_chat_to_stub_sub_orchestrators():
 
     with pytest.raises(UnsupportedEventError, match="Chat workflow orchestration is planned"):
         orchestrator.run(_chat_mention_event())
+
+
+def test_event_orchestrator_routes_pr_comment_and_review_events_to_explicit_stubs():
+    orchestrator = EventOrchestrator()
+
+    with pytest.raises(UnsupportedEventError, match="PR comment workflow orchestration is planned"):
+        orchestrator.run(_pr_commented_event())
+
+    with pytest.raises(UnsupportedEventError, match="PR review workflow orchestration is planned"):
+        orchestrator.run(_pr_reviewed_event())
 
 
 def test_pr_workflow_orchestrator_runs_stub_flow_and_renders_pr_comment_payload():
@@ -179,9 +215,9 @@ def test_pr_workflow_orchestrator_can_skip_validation_via_policy_hook():
 def test_pr_workflow_orchestrator_accepts_replaceable_components():
     class RecordingAnalyzer:
         def __init__(self) -> None:
-            self.events: list[PROpened] = []
+            self.events: list[PREvent] = []
 
-        def analyze(self, event: PROpened) -> BehaviourImpact:
+        def analyze(self, event: PREvent) -> BehaviourImpact:
             self.events.append(event)
             return BehaviourImpact(
                 summary="custom impact",
@@ -197,9 +233,9 @@ def test_pr_workflow_orchestrator_accepts_replaceable_components():
 
     class RecordingStrategyEngine:
         def __init__(self) -> None:
-            self.calls: list[tuple[PROpened, BehaviourImpact]] = []
+            self.calls: list[tuple[PREvent, BehaviourImpact]] = []
 
-        def plan(self, event: PROpened, impact: BehaviourImpact) -> StrategyResult:
+        def plan(self, event: PREvent, impact: BehaviourImpact) -> StrategyResult:
             self.calls.append((event, impact))
             return StrategyResult(
                 actions=(
@@ -217,7 +253,7 @@ def test_pr_workflow_orchestrator_accepts_replaceable_components():
         def __init__(self) -> None:
             self.calls: list[StrategyResult] = []
 
-        def validate(self, strategy: StrategyResult):
+        def validate(self, strategy: StrategyResult) -> tuple[ValidationResult, ...]:
             self.calls.append(strategy)
             return ()
 

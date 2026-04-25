@@ -37,7 +37,7 @@ class GitHubPRCommentRenderer:
                 f"Pull request: `#{report.pr_number}`",
                 f"Event: `{report.event_id}`",
                 "",
-                report.impact.summary,
+                report.summary_markdown or report.impact.summary,
                 "",
                 "### Impact Areas",
                 *_impact_lines(report),

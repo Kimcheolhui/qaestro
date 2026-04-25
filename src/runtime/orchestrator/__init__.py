@@ -9,6 +9,7 @@ from __future__ import annotations
 from .chat_workflow import ChatWorkflowOrchestrator
 from .ci_workflow import CIWorkflowOrchestrator
 from .dispatcher import EventOrchestrator
+from .pr_event_stubs import PRCommentWorkflowOrchestrator, PRReviewWorkflowOrchestrator
 from .pr_workflow import (
     PRWorkflowOrchestrator,
     StubPRBehaviourAnalyzer,
@@ -31,6 +32,8 @@ __all__ = [
     "ChatWorkflowOrchestrator",
     "EventOrchestrator",
     "PRBehaviourAnalyzer",
+    "PRCommentWorkflowOrchestrator",
+    "PRReviewWorkflowOrchestrator",
     "PRRuntimeValidator",
     "PRStrategyEngine",
     "PRWorkflowDraft",

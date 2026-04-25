@@ -66,7 +66,8 @@ def test_github_pr_comment_renderer_turns_qa_report_into_pr_comment_payload():
     assert payload.repo_full_name == "Kimcheolhui/qaestro"
     assert payload.pr_number == 31
     assert "Qaestro QA Report" in payload.body
-    assert "Step 2 stub analysis for PR #31" in payload.body
+    assert "Stub summary body." in payload.body
+    assert "Step 2 stub analysis for PR #31" not in payload.body
     assert "Run connector tests" in payload.body
     assert "Validation: skipped" in payload.body
     assert "corr-001" in payload.body
