@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from src.app.jobs import InMemoryJobQueue, JobQueue, RedisStreamsJobQueue
 from src.shared.config import AppConfig
+
+from .jobs import InMemoryJobQueue, JobQueue, RedisStreamsJobQueue
 
 
 def build_job_queue(cfg: AppConfig, *, consumer: str | None = None) -> JobQueue:

@@ -5,9 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from src.adapters.connectors.github import GitHubAppAuth, GitHubClient
-from src.app.worker.github import GitHubCommentPoster
-from src.app.worker.runner import NoopCommentPoster, Worker
 from src.shared.config import AppConfig
+
+from .github import GitHubCommentPoster
+from .runner import NoopCommentPoster, Worker
 
 
 def build_worker(cfg: AppConfig) -> Worker:

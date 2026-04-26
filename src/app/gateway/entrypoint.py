@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import sys
 
-from src.app.gateway.github import GitHubWebhookGateway
-from src.app.gateway.server import serve_github_webhook
-from src.app.queue_factory import build_job_queue
 from src.shared import get_logger, load_config, setup_logging
+
+from ..queue_factory import build_job_queue
+from .github import GitHubWebhookGateway
+from .server import serve_github_webhook
 
 logger = get_logger(__name__)
 

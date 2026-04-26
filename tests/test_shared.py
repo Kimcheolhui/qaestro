@@ -24,6 +24,7 @@ class TestAppConfig:
         assert isinstance(cfg, AppConfig)
         assert cfg.debug is False
         assert cfg.log_format == "json"
+        assert cfg.redis_consumer == ""
 
     def test_env_override(self) -> None:
         env = {
