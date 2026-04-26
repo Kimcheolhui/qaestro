@@ -7,7 +7,7 @@ from collections import deque
 from collections.abc import Iterable, Mapping
 from dataclasses import asdict, dataclass
 from datetime import datetime
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 from src.core.contracts import (
     ChatMention,
@@ -172,7 +172,7 @@ class RedisStreamsJobQueue:
             raise RuntimeError("Redis Streams queue requires the 'redis' package") from exc
 
         return cls(
-            redis_client=Redis.from_url(redis_url),
+            redis_client=cast(RedisClient, Redis.from_url(redis_url)),
             stream=stream,
             group=group,
             consumer=consumer,
