@@ -60,9 +60,9 @@ Step 2의 기본 local/test 구현은 `InMemoryJobQueue`를 유지한다. 단일
 
 - gateway는 normalized `EventJob`을 stream에 `XADD`한다.
 - worker는 consumer group으로 job을 읽고, 처리 후 `XACK`한다.
-- worker 재시작/장애 후에는 stale pending message를 claim해서 재처리할 수 있다.
+- worker 재시작/장애 후에는 stale pending message를 claim해서 재처리할 수 있다. 기본 claim idle은 300000ms(5분)로 두며, 운영에서는 정상 처리 중인 long-running job이 중복 claim되지 않도록 최대 처리 시간보다 크게 잡는다.
 - Step 2에서는 worker process를 long-lived consumer로 실행한다. `memory` backend만 local drain-and-exit 모드로 동작한다.
-- 실패 job은 retry가 모두 끝난 뒤 ack하고 실패 상태를 로그로 남긴다. dead-letter 저장소와 운영 모니터링은 Step 9에서 확장한다.
+- 실패 job은 retry가 모두 끝난 뒤 ack하고 `correlation_id`, `delivery_id`, `attempts`, `error`를 포함한 structured error log를 남긴다. dead-letter 저장소와 운영 모니터링은 Step 9에서 확장한다.
 
 Redis Streams를 우선 선택한 이유는 Step 2 목표인 gateway/worker process 분리를 가장 낮은 운영 부담으로 검증할 수 있고, NATS JetStream보다 현재 self-hosted MVP의 도입면이 작기 때문이다. NATS JetStream은 이벤트 버스 중심 구조가 커질 때 다시 검토한다.
 

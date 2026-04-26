@@ -11,9 +11,12 @@ from typing import Protocol
 from src.adapters.renderers import PRCommentPayload
 from src.core.contracts import Event
 from src.runtime.orchestrator import EventOrchestrator, PRWorkflowResult
+from src.shared import get_logger
 
 from ..jobs import EventJob, JobQueue, MalformedEventJob, QueuedJob
 from .types import WorkerExecution, WorkerExecutionContext, WorkerStatus
+
+logger = get_logger(__name__)
 
 
 class Orchestrator(Protocol):
@@ -126,10 +129,30 @@ class Worker:
             execution = self.process(job)
             queue.ack(job)
             if execution.status is WorkerStatus.FAILED:
-                # Step 2 records the failure state in WorkerExecution but does
-                # not yet persist a DLQ. Acknowledge terminal failures so one
-                # poison job does not block the shared stream forever.
+                self._log_failed_execution(job, execution)
+                # Step 2 records terminal failures and acknowledges them so one
+                # poison job does not block the shared stream forever. A DLQ and
+                # metrics are planned for later operational hardening.
                 continue
+
+    def _log_failed_execution(self, job: QueuedJob, execution: WorkerExecution) -> None:
+        delivery_id = job.delivery_id
+        correlation_id = execution.correlation_id
+        job_type = type(job).__name__
+        if isinstance(job, EventJob):
+            correlation_id = correlation_id or job.correlation_id
+            job_type = job.event.meta.event_type.value
+
+        logger.error(
+            "worker job failed",
+            extra={
+                "correlation_id": correlation_id,
+                "delivery_id": delivery_id,
+                "attempts": execution.attempts,
+                "error": execution.error,
+                "job_type": job_type,
+            },
+        )
 
     def _run_once(self, job: EventJob, context: WorkerExecutionContext) -> PRWorkflowResult:
         if context.timeout_seconds is not None:

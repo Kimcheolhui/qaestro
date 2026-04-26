@@ -47,7 +47,7 @@ class AppConfig:
     redis_consumer_group: str = "qaestro-workers"
     redis_consumer: str = ""
     redis_read_block_ms: int = 5000
-    redis_claim_idle_ms: int = 30000
+    redis_claim_idle_ms: int = 300000
 
     # ── Feature flags (for future use) ─────────────────────────────
     features: dict[str, bool] = field(default_factory=dict)

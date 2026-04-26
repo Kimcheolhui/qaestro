@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from unittest.mock import patch
+
+import pytest
 
 from src.shared.config import AppConfig, load_config
 from src.shared.logging import get_logger, setup_logging
@@ -25,6 +28,7 @@ class TestAppConfig:
         assert cfg.debug is False
         assert cfg.log_format == "json"
         assert cfg.redis_consumer == ""
+        assert cfg.redis_claim_idle_ms == 300000
 
     def test_env_override(self) -> None:
         env = {
@@ -78,6 +82,29 @@ class TestLogging:
         setup_logging(level="INFO", fmt="text")
         root = logging.getLogger()
         assert root.level == logging.INFO
+
+    def test_setup_logging_json_includes_worker_failure_fields(self, capsys: pytest.CaptureFixture[str]) -> None:
+        setup_logging(level="ERROR", fmt="json")
+        log = logging.getLogger("qaestro.test.worker")
+
+        log.error(
+            "worker job failed",
+            extra={
+                "correlation_id": "corr-1",
+                "delivery_id": "1700000000000-0",
+                "attempts": 2,
+                "error": "boom",
+                "job_type": "pr_opened",
+            },
+        )
+        captured = capsys.readouterr()
+        payload = json.loads(captured.err)
+
+        assert payload["correlation_id"] == "corr-1"
+        assert payload["delivery_id"] == "1700000000000-0"
+        assert payload["attempts"] == 2
+        assert payload["error"] == "boom"
+        assert payload["job_type"] == "pr_opened"
 
 
 class TestTracing:

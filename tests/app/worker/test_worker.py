@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from datetime import UTC, datetime
+from typing import Any, cast
 
 import pytest
 
@@ -235,6 +237,51 @@ def test_worker_run_forever_sleeps_when_queue_is_empty(monkeypatch: pytest.Monke
         pass
 
     assert sleeps == [0.25]
+
+
+def test_worker_run_forever_logs_failed_queue_jobs(caplog: pytest.LogCaptureFixture) -> None:
+    event = _event()
+    job = EventJob(event=event, correlation_id="failed-forever", delivery_id="1700000000005-0")
+
+    class FailingOrchestrator:
+        def run(self, event: Event) -> PRWorkflowResult:
+            raise RuntimeError("terminal failure")
+
+    class FailingThenStopQueue:
+        def __init__(self) -> None:
+            self._jobs = [job]
+            self.acked: list[EventJob] = []
+
+        def enqueue(self, job: EventJob) -> None:
+            raise AssertionError("not used")
+
+        def dequeue(self) -> EventJob | None:
+            if self._jobs:
+                return self._jobs.pop(0)
+            raise KeyboardInterrupt
+
+        def ack(self, job: EventJob | MalformedEventJob) -> None:
+            assert isinstance(job, EventJob)
+            self.acked.append(job)
+
+    queue = FailingThenStopQueue()
+    worker = Worker(orchestrator=FailingOrchestrator(), max_attempts=1)
+
+    with caplog.at_level(logging.ERROR, logger="qaestro.src.app.worker.runner"):
+        try:
+            worker.run_forever(queue)
+            raise AssertionError("expected test queue to stop the loop")
+        except KeyboardInterrupt:
+            pass
+
+    assert queue.acked == [job]
+    assert len(caplog.records) == 1
+    record = cast(Any, caplog.records[0])
+    assert record.message == "worker job failed"
+    assert record.correlation_id == "failed-forever"
+    assert record.delivery_id == "1700000000005-0"
+    assert record.attempts == 1
+    assert record.error == "terminal failure"
 
 
 def test_worker_acks_malformed_queue_jobs() -> None:
