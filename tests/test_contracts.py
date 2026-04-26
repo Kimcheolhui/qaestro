@@ -393,7 +393,7 @@ class TestEventUnion:
         )
         # This is a structural check — the union type is just a type alias,
         # so we verify each concrete type is in the union's __args__
-        event_types = Event.__args__ if hasattr(Event, "__args__") else []  # type: ignore[union-attr]
+        event_types = Event.__args__ if hasattr(Event, "__args__") else []
         assert PROpened in event_types
         assert PRUpdated in event_types
         assert PRCommented in event_types

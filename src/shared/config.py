@@ -39,8 +39,15 @@ class AppConfig:
     github_app_installation_id: int = 0
     github_app_private_key_path: str = ""
 
-    # ── Worker ─────────────────────────────────────────────────────
+    # ── Worker / queue ─────────────────────────────────────────────
     worker_concurrency: int = 4
+    queue_backend: str = "memory"
+    redis_url: str = "redis://localhost:6379/0"
+    redis_stream: str = "qaestro:jobs"
+    redis_consumer_group: str = "qaestro-workers"
+    redis_consumer: str = "qaestro-worker"
+    redis_read_block_ms: int = 5000
+    redis_claim_idle_ms: int = 30000
 
     # ── Feature flags (for future use) ─────────────────────────────
     features: dict[str, bool] = field(default_factory=dict)
@@ -61,6 +68,13 @@ _ENV_MAP: dict[str, tuple[str, type[Any]]] = {
     "github_app_installation_id": ("GITHUB_APP_INSTALLATION_ID", int),
     "github_app_private_key_path": ("GITHUB_APP_PRIVATE_KEY_PATH", str),
     "worker_concurrency": ("WORKER_CONCURRENCY", int),
+    "queue_backend": ("QUEUE_BACKEND", str),
+    "redis_url": ("REDIS_URL", str),
+    "redis_stream": ("REDIS_STREAM", str),
+    "redis_consumer_group": ("REDIS_CONSUMER_GROUP", str),
+    "redis_consumer": ("REDIS_CONSUMER", str),
+    "redis_read_block_ms": ("REDIS_READ_BLOCK_MS", int),
+    "redis_claim_idle_ms": ("REDIS_CLAIM_IDLE_MS", int),
 }
 
 

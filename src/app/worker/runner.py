@@ -11,7 +11,7 @@ from src.adapters.renderers import PRCommentPayload
 from src.core.contracts import Event
 from src.runtime.orchestrator import EventOrchestrator, PRWorkflowResult
 
-from ..jobs import EventJob, JobQueue
+from ..jobs import EventJob, JobQueue, MalformedEventJob, QueuedJob
 from .types import WorkerExecution, WorkerExecutionContext, WorkerStatus
 
 
@@ -59,7 +59,15 @@ class Worker:
         self._timeout_seconds = timeout_seconds
         self._agent_runner = agent_runner
 
-    def process(self, job: EventJob) -> WorkerExecution:
+    def process(self, job: QueuedJob) -> WorkerExecution:
+        if isinstance(job, MalformedEventJob):
+            return WorkerExecution(
+                correlation_id="",
+                status=WorkerStatus.FAILED,
+                attempts=0,
+                error=f"malformed queue message {job.delivery_id}: {job.error}",
+            )
+
         last_error = ""
         for attempt in range(1, self._max_attempts + 1):
             context = WorkerExecutionContext(
@@ -99,8 +107,23 @@ class Worker:
     def run_until_empty(self, queue: JobQueue) -> tuple[WorkerExecution, ...]:
         results: list[WorkerExecution] = []
         while (job := queue.dequeue()) is not None:
-            results.append(self.process(job))
+            execution = self.process(job)
+            results.append(execution)
+            queue.ack(job)
         return tuple(results)
+
+    def run_forever(self, queue: JobQueue) -> None:
+        """Continuously process jobs from a blocking queue."""
+        while True:
+            if (job := queue.dequeue()) is None:
+                continue
+            execution = self.process(job)
+            queue.ack(job)
+            if execution.status is WorkerStatus.FAILED:
+                # Step 2 records the failure state in WorkerExecution but does
+                # not yet persist a DLQ. Acknowledge terminal failures so one
+                # poison job does not block the shared stream forever.
+                continue
 
     def _run_once(self, job: EventJob, context: WorkerExecutionContext) -> PRWorkflowResult:
         if context.timeout_seconds is not None:

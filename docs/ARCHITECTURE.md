@@ -15,7 +15,9 @@ flowchart TB
     end
 
     subgraph Event Ingestion Layer
-        EI["Event Router (Orchestrator)<br/>(공통 이벤트 인터페이스)"]
+        GW["Webhook Gateway<br/>(signature verify + normalize)"]
+        Q["Redis Streams / InMemoryJobQueue<br/>(EventJob queue)"]
+        EI["Worker + Event Router<br/>(공통 이벤트 인터페이스)"]
     end
 
     subgraph Core Engine
@@ -35,8 +37,10 @@ flowchart TB
     DEV -->|"논의 후 @qaestro 태그"| CHAT
     DEV -->|"PR 생성"| GH
 
-    GH -->|"PROpened / PRCommented /<br/> PRReviewed / CICompleted"| EI
-    CHAT -->|"ChatMention<br/>(@qaestro 태그 시 쓰레드 전체 수집)"| EI
+    GH -->|"PROpened / PRCommented /<br/> PRReviewed / CICompleted"| GW
+    CHAT -->|"ChatMention<br/>(@qaestro 태그 시 쓰레드 전체 수집)"| GW
+    GW -->|"EventJob enqueue"| Q
+    Q -->|"dequeue + ack"| EI
 
     EI -->|"맥락 묶기<br/>(여러 Sources를 <br/>동일 컨텍스트로 연결)"| BA
 
@@ -83,6 +87,12 @@ Agent가 채널을 상시 모니터링하지 않음. 개발자가 필요할 때 
 
 - 하나의 PR에 대해 여러 소스에서 이벤트가 들어올 때 (채널 논의 + PR 생성 + CI 결과) **같은 맥락으로 묶는 방법**
 - 이벤트 간 **순서와 타이밍** — 채널 논의가 PR보다 먼저 올 수도, 나중에 올 수도 있음
+
+### Queue boundary
+
+`InMemoryJobQueue`는 테스트와 단일 프로세스 local wiring용이다. gateway와 worker를 별도 프로세스로 실행하면 각 프로세스의 메모리가 분리되므로 같은 queue를 공유하지 못한다. self-hosted MVP에서 실제 프로세스 분리를 검증할 때는 Redis Streams backend를 사용한다. Redis Streams는 `EventJob` payload를 durable하게 보관하고, worker consumer group이 처리 후 ack하는 경계로 동작한다.
+
+Redis backend 실행에 필요한 핵심 환경변수는 `QAESTRO_QUEUE_BACKEND=redis-streams`, `QAESTRO_REDIS_URL`, `QAESTRO_REDIS_STREAM`, `QAESTRO_REDIS_CONSUMER_GROUP`, `QAESTRO_REDIS_CONSUMER`다. gateway와 worker는 같은 URL/stream/group을 봐야 하고, worker process는 long-lived consumer로 실행된다.
 
 ### 2. Behaviour Analyzer
 

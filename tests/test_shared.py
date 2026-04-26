@@ -30,12 +30,26 @@ class TestAppConfig:
             "QAESTRO_DEBUG": "true",
             "QAESTRO_LOG_LEVEL": "DEBUG",
             "QAESTRO_LOG_FORMAT": "text",
+            "QAESTRO_QUEUE_BACKEND": "redis-streams",
+            "QAESTRO_REDIS_URL": "redis://redis:6379/1",
+            "QAESTRO_REDIS_STREAM": "qaestro:test:jobs",
+            "QAESTRO_REDIS_CONSUMER_GROUP": "qaestro-test-workers",
+            "QAESTRO_REDIS_CONSUMER": "worker-a",
+            "QAESTRO_REDIS_READ_BLOCK_MS": "2500",
+            "QAESTRO_REDIS_CLAIM_IDLE_MS": "60000",
         }
         with patch.dict(os.environ, env, clear=True):
             cfg = load_config()
         assert cfg.debug is True
         assert cfg.log_level == "DEBUG"
         assert cfg.log_format == "text"
+        assert cfg.queue_backend == "redis-streams"
+        assert cfg.redis_url == "redis://redis:6379/1"
+        assert cfg.redis_stream == "qaestro:test:jobs"
+        assert cfg.redis_consumer_group == "qaestro-test-workers"
+        assert cfg.redis_consumer == "worker-a"
+        assert cfg.redis_read_block_ms == 2500
+        assert cfg.redis_claim_idle_ms == 60000
 
     def test_frozen(self) -> None:
         cfg = load_config()

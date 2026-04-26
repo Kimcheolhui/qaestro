@@ -6,7 +6,7 @@ import time
 from datetime import UTC, datetime
 
 from src.adapters.renderers import PRCommentPayload
-from src.app.worker import EventJob, InMemoryJobQueue, Worker, WorkerStatus
+from src.app.worker import EventJob, InMemoryJobQueue, MalformedEventJob, Worker, WorkerStatus
 from src.core.contracts import Event, EventMeta, EventSource, EventType, PROpened
 from src.runtime.orchestrator import PRWorkflowResult
 
@@ -151,6 +151,84 @@ def test_worker_enforces_timeout_per_attempt() -> None:
     assert "timed out" in execution.error
     assert elapsed < 0.04
     assert poster.payloads == []
+
+
+def test_worker_acks_successful_queue_jobs() -> None:
+    event = _event()
+    job = EventJob(event=event, correlation_id="acked")
+
+    class AckRecordingQueue(InMemoryJobQueue):
+        def __init__(self) -> None:
+            super().__init__([job])
+            self.acked: list[EventJob] = []
+
+        def ack(self, job: EventJob | MalformedEventJob) -> None:
+            assert isinstance(job, EventJob)
+            self.acked.append(job)
+
+    queue = AckRecordingQueue()
+    worker = Worker(comment_poster=RecordingCommentPoster())
+
+    executions = worker.run_until_empty(queue)
+
+    assert executions[0].status == WorkerStatus.SUCCEEDED
+    assert queue.acked == [job]
+
+
+def test_worker_acks_failed_queue_jobs_after_retries_are_exhausted() -> None:
+    event = _event()
+    job = EventJob(event=event, correlation_id="failed")
+
+    class FailingOrchestrator:
+        def run(self, event: Event) -> PRWorkflowResult:
+            raise RuntimeError("terminal failure")
+
+    class AckRecordingQueue(InMemoryJobQueue):
+        def __init__(self) -> None:
+            super().__init__([job])
+            self.acked: list[EventJob] = []
+
+        def ack(self, job: EventJob | MalformedEventJob) -> None:
+            assert isinstance(job, EventJob)
+            self.acked.append(job)
+
+    queue = AckRecordingQueue()
+    worker = Worker(orchestrator=FailingOrchestrator(), max_attempts=1)
+
+    executions = worker.run_until_empty(queue)
+
+    assert executions[0].status == WorkerStatus.FAILED
+    assert queue.acked == [job]
+
+
+def test_worker_acks_malformed_queue_jobs() -> None:
+    job = MalformedEventJob(delivery_id="1700000000003-0", error="bad json")
+
+    class AckRecordingQueue:
+        def __init__(self) -> None:
+            self._jobs = [job]
+            self.acked: list[MalformedEventJob] = []
+
+        def enqueue(self, job: EventJob) -> None:
+            raise AssertionError("not used")
+
+        def dequeue(self) -> MalformedEventJob | None:
+            if not self._jobs:
+                return None
+            return self._jobs.pop(0)
+
+        def ack(self, job: EventJob | MalformedEventJob) -> None:
+            assert isinstance(job, MalformedEventJob)
+            self.acked.append(job)
+
+    queue = AckRecordingQueue()
+    worker = Worker()
+
+    executions = worker.run_until_empty(queue)
+
+    assert executions[0].status == WorkerStatus.FAILED
+    assert "malformed queue message" in executions[0].error
+    assert queue.acked == [job]
 
 
 def test_queue_runs_until_empty_in_fifo_order() -> None:

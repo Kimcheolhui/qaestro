@@ -2,19 +2,27 @@
 
 from __future__ import annotations
 
+import socket
 import sys
 
-from src.shared import get_logger, setup_logging
+from src.app.queue_factory import build_job_queue
+from src.app.worker.factory import build_worker
+from src.shared import get_logger, load_config, setup_logging
 
 logger = get_logger(__name__)
 
 
 def main() -> None:
     """Start the worker process."""
-    setup_logging()
+    cfg = load_config()
+    setup_logging(level=cfg.log_level, fmt=cfg.log_format)
     logger.info("qaestro-worker starting")
-    # TODO(Step 2 deployment wiring): connect this entrypoint to a durable queue
-    # and GitHub App credentials. Unit-tested worker orchestration lives in
-    # ``runner.py`` and is intentionally side-effect free by default.
-    logger.info("qaestro-worker ready — no durable queue configured yet, exiting")
+    queue = build_job_queue(cfg, consumer=cfg.redis_consumer or socket.gethostname())
+    worker = build_worker(cfg)
+    if cfg.queue_backend == "memory":
+        executions = worker.run_until_empty(queue)
+        logger.info("qaestro-worker drained in-memory queue", extra={"job_count": len(executions)})
+    else:
+        logger.info("qaestro-worker consuming queue", extra={"queue_backend": cfg.queue_backend})
+        worker.run_forever(queue)
     sys.exit(0)
