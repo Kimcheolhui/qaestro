@@ -98,7 +98,7 @@ class InMemoryJobQueue:
         return len(self._jobs)
 
 
-class RedisClient(Protocol):
+class RedisStreamClient(Protocol):
     """Subset of redis-py used by :class:`RedisStreamsJobQueue`."""
 
     def xgroup_create(self, stream: str, group: str, id: str, mkstream: bool) -> Any: ...
@@ -138,12 +138,13 @@ class RedisStreamsJobQueue:
     def __init__(
         self,
         *,
-        redis_client: RedisClient,
+        redis_client: RedisStreamClient,
         stream: str = "qaestro:jobs",
         group: str = "qaestro-workers",
         consumer: str = "qaestro-worker",
         read_block_ms: int = 5000,
         claim_idle_ms: int = 30000,
+        busy_group_error: type[Exception] = Exception,
     ) -> None:
         self._redis = redis_client
         self._stream = stream
@@ -151,6 +152,7 @@ class RedisStreamsJobQueue:
         self._consumer = consumer
         self._read_block_ms = read_block_ms
         self._claim_idle_ms = claim_idle_ms
+        self._busy_group_error = busy_group_error
         self._claim_start_id = "0-0"
         self._ensure_group()
 
@@ -168,16 +170,18 @@ class RedisStreamsJobQueue:
         """Create a Redis Streams queue from a redis-py URL."""
         try:
             from redis import Redis
+            from redis.exceptions import ResponseError
         except ImportError as exc:  # pragma: no cover - exercised only when dependency is missing
             raise RuntimeError("Redis Streams queue requires the 'redis' package") from exc
 
         return cls(
-            redis_client=cast(RedisClient, Redis.from_url(redis_url)),
+            redis_client=cast(RedisStreamClient, Redis.from_url(redis_url)),
             stream=stream,
             group=group,
             consumer=consumer,
             read_block_ms=read_block_ms,
             claim_idle_ms=claim_idle_ms,
+            busy_group_error=ResponseError,
         )
 
     def enqueue(self, job: EventJob) -> None:
@@ -204,7 +208,7 @@ class RedisStreamsJobQueue:
     def _ensure_group(self) -> None:
         try:
             self._redis.xgroup_create(self._stream, self._group, "0", mkstream=True)
-        except Exception as exc:
+        except self._busy_group_error as exc:
             if "BUSYGROUP" not in str(exc):
                 raise
 

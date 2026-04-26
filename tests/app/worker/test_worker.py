@@ -5,6 +5,8 @@ from __future__ import annotations
 import time
 from datetime import UTC, datetime
 
+import pytest
+
 from src.adapters.renderers import PRCommentPayload
 from src.app.worker import EventJob, InMemoryJobQueue, MalformedEventJob, Worker, WorkerStatus
 from src.core.contracts import Event, EventMeta, EventSource, EventType, PROpened
@@ -199,6 +201,40 @@ def test_worker_acks_failed_queue_jobs_after_retries_are_exhausted() -> None:
 
     assert executions[0].status == WorkerStatus.FAILED
     assert queue.acked == [job]
+
+
+def test_worker_run_forever_sleeps_when_queue_is_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    class EmptyThenStopQueue:
+        def __init__(self) -> None:
+            self.dequeue_calls = 0
+
+        def enqueue(self, job: EventJob) -> None:
+            raise AssertionError("not used")
+
+        def dequeue(self) -> EventJob | None:
+            self.dequeue_calls += 1
+            if self.dequeue_calls == 1:
+                return None
+            raise KeyboardInterrupt
+
+        def ack(self, job: EventJob | MalformedEventJob) -> None:
+            raise AssertionError("not used")
+
+    sleeps: list[float] = []
+
+    def record_sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+
+    monkeypatch.setattr("src.app.worker.runner.time.sleep", record_sleep)
+    worker = Worker()
+
+    try:
+        worker.run_forever(EmptyThenStopQueue(), idle_sleep_seconds=0.25)
+        raise AssertionError("expected test queue to stop the loop")
+    except KeyboardInterrupt:
+        pass
+
+    assert sleeps == [0.25]
 
 
 def test_worker_acks_malformed_queue_jobs() -> None:

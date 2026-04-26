@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeoutError
@@ -112,10 +113,15 @@ class Worker:
             queue.ack(job)
         return tuple(results)
 
-    def run_forever(self, queue: JobQueue) -> None:
-        """Continuously process jobs from a blocking queue."""
+    def run_forever(self, queue: JobQueue, *, idle_sleep_seconds: float = 0.1) -> None:
+        """Continuously process jobs from a blocking queue.
+
+        Redis-backed queues block in ``dequeue()``. The small idle sleep keeps
+        accidental non-blocking queue usage from turning into a CPU busy loop.
+        """
         while True:
             if (job := queue.dequeue()) is None:
+                time.sleep(idle_sleep_seconds)
                 continue
             execution = self.process(job)
             queue.ack(job)

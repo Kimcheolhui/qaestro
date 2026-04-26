@@ -28,10 +28,13 @@ class FakeRedis:
         self.claimed_messages: list[tuple[bytes, dict[bytes, bytes]]] = []
         self.acked: list[tuple[str, str, str]] = []
         self.claim_start_ids: list[str] = []
+        self.xgroup_create_error: Exception | None = None
 
     def xgroup_create(self, stream: str, group: str, id: str, mkstream: bool) -> None:
         assert mkstream is True
         self.group_created = (stream, group, id)
+        if self.xgroup_create_error is not None:
+            raise self.xgroup_create_error
 
     def xadd(self, stream: str, fields: dict[str, str]) -> bytes:
         self.added.append((stream, fields))
@@ -163,7 +166,7 @@ def _stored_job_payload(redis: FakeRedis) -> dict[bytes, bytes]:
     return {b"job": fields["job"].encode("utf-8")}
 
 
-def _queue(redis: FakeRedis) -> RedisStreamsJobQueue:
+def _queue(redis: FakeRedis, *, busy_group_error: type[Exception] = Exception) -> RedisStreamsJobQueue:
     return RedisStreamsJobQueue(
         redis_client=redis,  # type: ignore[arg-type]
         stream="qaestro:jobs",
@@ -171,7 +174,34 @@ def _queue(redis: FakeRedis) -> RedisStreamsJobQueue:
         consumer="worker-1",
         read_block_ms=0,
         claim_idle_ms=5000,
+        busy_group_error=busy_group_error,
     )
+
+
+def test_redis_streams_queue_ignores_existing_consumer_group_error() -> None:
+    class BusyGroupError(Exception):
+        pass
+
+    redis = FakeRedis()
+    redis.xgroup_create_error = BusyGroupError("BUSYGROUP Consumer Group name already exists")
+
+    queue = _queue(redis, busy_group_error=BusyGroupError)
+
+    assert isinstance(queue, RedisStreamsJobQueue)
+
+
+def test_redis_streams_queue_reraises_unexpected_group_create_error() -> None:
+    class BusyGroupError(Exception):
+        pass
+
+    redis = FakeRedis()
+    redis.xgroup_create_error = BusyGroupError("connection refused")
+
+    try:
+        _queue(redis, busy_group_error=BusyGroupError)
+        raise AssertionError("expected unexpected group creation errors to propagate")
+    except BusyGroupError:
+        pass
 
 
 def test_redis_streams_queue_round_trips_all_event_job_types() -> None:
