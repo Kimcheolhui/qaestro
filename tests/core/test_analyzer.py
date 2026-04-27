@@ -65,6 +65,9 @@ def test_analyzer_groups_files_by_observed_path_groups_and_aggregates_risk() -> 
         "files_modified": 3,
         "files_removed": 0,
         "files_renamed": 0,
+        "files_copied": 0,
+        "files_unchanged": 0,
+        "files_unknown": 0,
     }
     assert "src/api/payments.py" in impact.summary
     assert "3 files" in impact.summary
@@ -73,6 +76,42 @@ def test_analyzer_groups_files_by_observed_path_groups_and_aggregates_risk() -> 
         ("src/api", RiskLevel.MEDIUM),
         ("tests/api", RiskLevel.LOW),
     ]
+
+
+def test_analyzer_counts_every_normalized_file_status_in_diff_stats() -> None:
+    context = PRAnalysisContext(
+        repo_full_name="acme-corp/web-api",
+        pr_number=126,
+        title="chore: exercise status counters",
+        body="Synthetic status coverage.",
+        base_branch="main",
+        head_branch="chore/statuses",
+        files=(
+            PRFileDiff(path="src/created.py", status=PRFileStatus.ADDED, additions=3),
+            PRFileDiff(path="src/modified.py", status=PRFileStatus.MODIFIED, additions=4, deletions=1),
+            PRFileDiff(path="src/changed.py", status=PRFileStatus.CHANGED, additions=2, deletions=2),
+            PRFileDiff(path="src/deleted.py", status=PRFileStatus.REMOVED, deletions=5),
+            PRFileDiff(path="src/new_name.py", status=PRFileStatus.RENAMED, previous_filename="src/old_name.py"),
+            PRFileDiff(path="src/copied.py", status=PRFileStatus.COPIED, additions=1),
+            PRFileDiff(path="src/same.py", status=PRFileStatus.UNCHANGED),
+            PRFileDiff(path="src/provider-specific.py", status=PRFileStatus.UNKNOWN),
+        ),
+    )
+
+    impact = RuleBasedPRBehaviourAnalyzer().analyze(context)
+
+    assert impact.raw_diff_stats == {
+        "files_changed": 8,
+        "additions": 10,
+        "deletions": 8,
+        "files_added": 1,
+        "files_modified": 2,
+        "files_removed": 1,
+        "files_renamed": 1,
+        "files_copied": 1,
+        "files_unchanged": 1,
+        "files_unknown": 1,
+    }
 
 
 def test_analyzer_uses_actual_repo_path_groups_instead_of_fixed_module_labels() -> None:

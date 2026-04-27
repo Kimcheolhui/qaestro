@@ -111,3 +111,33 @@ def test_strategy_generates_generic_actions_for_repo_observed_groups() -> None:
     assert result.actions[0].action_type is ActionType.RUN_TESTS
     assert result.actions[0].target == "tests/src/adapters/connectors/github"
     assert result.actions[1].target == "tests/"
+
+
+def test_strategy_skips_low_signal_doc_groups_for_step3_test_actions() -> None:
+    impact = BehaviourImpact(
+        summary="Changed documentation only",
+        areas=(
+            ImpactArea(
+                module="docs",
+                description="modified docs/ARCHITECTURE.md",
+                risk_level=RiskLevel.LOW,
+                affected_files=("docs/ARCHITECTURE.md",),
+            ),
+            ImpactArea(
+                module="CHANGELOG.md",
+                description="modified CHANGELOG.md",
+                risk_level=RiskLevel.LOW,
+                affected_files=("CHANGELOG.md",),
+            ),
+        ),
+        overall_risk=RiskLevel.LOW,
+    )
+
+    result = RuleBasedPRStrategyEngine().plan(
+        repo_full_name="Kimcheolhui/qaestro",
+        pr_number=40,
+        title="docs: update architecture notes",
+        impact=impact,
+    )
+
+    assert result.actions == ()

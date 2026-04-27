@@ -51,7 +51,7 @@ def _area_actions(impact: BehaviourImpact) -> tuple[StrategyAction, ...]:
             base_priority=2 if area.risk_level is RiskLevel.MEDIUM else 1,
         )
         for area in impact.areas
-        if area.module not in {"README.md"}
+        if not _is_low_signal_doc_group(area.module)
     )
 
 

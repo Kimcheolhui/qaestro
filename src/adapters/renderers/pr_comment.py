@@ -69,17 +69,39 @@ def _diff_stat_lines(report: QAReport) -> list[str]:
     stats = report.impact.raw_diff_stats
     if not stats:
         return ["- Diff statistics unavailable."]
+    status_counts = _status_counts(stats)
+    status_line = "- File status counts: unavailable."
+    if status_counts:
+        status_line = "- File status counts: " + ", ".join(f"{status} `{count}`" for status, count in status_counts)
     return [
         f"- Files changed: `{stats.get('files_changed', 0)}`",
         f"- Additions/deletions: `+{stats.get('additions', 0)}/-{stats.get('deletions', 0)}`",
-        (
-            "- File status counts: "
-            f"added `{stats.get('files_added', 0)}`, "
-            f"modified `{stats.get('files_modified', 0)}`, "
-            f"removed `{stats.get('files_removed', 0)}`, "
-            f"renamed `{stats.get('files_renamed', 0)}`"
-        ),
+        status_line,
     ]
+
+
+def _status_counts(stats: dict[str, int]) -> list[tuple[str, int]]:
+    """Return known status counters first, then any future counters by name."""
+    preferred_order = (
+        "files_added",
+        "files_modified",
+        "files_removed",
+        "files_renamed",
+        "files_copied",
+        "files_unchanged",
+        "files_unknown",
+    )
+    known = [(key, stats[key]) for key in preferred_order if key in stats]
+    extra = sorted(
+        (key, value)
+        for key, value in stats.items()
+        if key.startswith("files_") and key not in {"files_changed", *preferred_order}
+    )
+    return [(_status_label(key), value) for key, value in (*known, *extra)]
+
+
+def _status_label(key: str) -> str:
+    return key.removeprefix("files_").replace("_", " ")
 
 
 def _impact_lines(report: QAReport) -> list[str]:

@@ -111,6 +111,9 @@ def _diff_stats(files: tuple[PRFileDiff, ...]) -> dict[str, int]:
         "files_modified": sum(1 for file in files if file.status in {PRFileStatus.MODIFIED, PRFileStatus.CHANGED}),
         "files_removed": sum(1 for file in files if file.status is PRFileStatus.REMOVED),
         "files_renamed": sum(1 for file in files if file.status is PRFileStatus.RENAMED),
+        "files_copied": sum(1 for file in files if file.status is PRFileStatus.COPIED),
+        "files_unchanged": sum(1 for file in files if file.status is PRFileStatus.UNCHANGED),
+        "files_unknown": sum(1 for file in files if file.status is PRFileStatus.UNKNOWN),
     }
 
 
