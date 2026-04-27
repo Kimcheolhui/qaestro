@@ -155,6 +155,7 @@ qaestro를 구현할 때 참고할 수 있는 모듈 단위 요구사항 문서.
 - PR 이벤트와 CI 이벤트를 같은 context로 묶을 수 있어야 함
 - Behaviour Analyzer -> Strategy Engine -> Runtime Validator -> Renderer 순서를 통제할 수 있어야 함
 - validation 실행 여부를 risk level, event type, policy 기준으로 분기할 수 있어야 함
+- 단계별로 agent에게 허용할 tool 범위를 정하고, read/write/destructive action을 구분할 수 있어야 함
 
 **제외 범위**
 
@@ -439,6 +440,8 @@ qaestro를 구현할 때 참고할 수 있는 모듈 단위 요구사항 문서.
 
 - provider SDK를 domain logic와 분리
 - GitHub connector와 ChatOps connector를 독립적으로 교체 가능해야 함
+- PR metadata/diff/files/comments/reviews 조회와 PR/comment 작성 capability를 tool로 노출 가능한 형태로 유지할 것
+- ChatOps connector도 thread context read와 response write를 분리해 policy 적용이 가능해야 함
 - runtime/knowledge/storage provider와의 결합을 connector 밖으로 새지 않게 할 것
 
 **제외 범위**
