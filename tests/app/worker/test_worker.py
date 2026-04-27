@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from datetime import UTC, datetime
+from typing import Any, cast
+
+import pytest
 
 from src.adapters.renderers import PRCommentPayload
-from src.app.worker import EventJob, InMemoryJobQueue, Worker, WorkerStatus
+from src.app.worker import EventJob, InMemoryJobQueue, MalformedEventJob, Worker, WorkerStatus
 from src.core.contracts import Event, EventMeta, EventSource, EventType, PROpened
 from src.runtime.orchestrator import PRWorkflowResult
 
@@ -151,6 +155,165 @@ def test_worker_enforces_timeout_per_attempt() -> None:
     assert "timed out" in execution.error
     assert elapsed < 0.04
     assert poster.payloads == []
+
+
+def test_worker_acks_successful_queue_jobs() -> None:
+    event = _event()
+    job = EventJob(event=event, correlation_id="acked")
+
+    class AckRecordingQueue(InMemoryJobQueue):
+        def __init__(self) -> None:
+            super().__init__([job])
+            self.acked: list[EventJob] = []
+
+        def ack(self, job: EventJob | MalformedEventJob) -> None:
+            assert isinstance(job, EventJob)
+            self.acked.append(job)
+
+    queue = AckRecordingQueue()
+    worker = Worker(comment_poster=RecordingCommentPoster())
+
+    executions = worker.run_until_empty(queue)
+
+    assert executions[0].status == WorkerStatus.SUCCEEDED
+    assert queue.acked == [job]
+
+
+def test_worker_acks_failed_queue_jobs_after_retries_are_exhausted() -> None:
+    event = _event()
+    job = EventJob(event=event, correlation_id="failed")
+
+    class FailingOrchestrator:
+        def run(self, event: Event) -> PRWorkflowResult:
+            raise RuntimeError("terminal failure")
+
+    class AckRecordingQueue(InMemoryJobQueue):
+        def __init__(self) -> None:
+            super().__init__([job])
+            self.acked: list[EventJob] = []
+
+        def ack(self, job: EventJob | MalformedEventJob) -> None:
+            assert isinstance(job, EventJob)
+            self.acked.append(job)
+
+    queue = AckRecordingQueue()
+    worker = Worker(orchestrator=FailingOrchestrator(), max_attempts=1)
+
+    executions = worker.run_until_empty(queue)
+
+    assert executions[0].status == WorkerStatus.FAILED
+    assert queue.acked == [job]
+
+
+def test_worker_run_forever_sleeps_when_queue_is_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    class EmptyThenStopQueue:
+        def __init__(self) -> None:
+            self.dequeue_calls = 0
+
+        def enqueue(self, job: EventJob) -> None:
+            raise AssertionError("not used")
+
+        def dequeue(self) -> EventJob | None:
+            self.dequeue_calls += 1
+            if self.dequeue_calls == 1:
+                return None
+            raise KeyboardInterrupt
+
+        def ack(self, job: EventJob | MalformedEventJob) -> None:
+            raise AssertionError("not used")
+
+    sleeps: list[float] = []
+
+    def record_sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+
+    monkeypatch.setattr("src.app.worker.runner.time.sleep", record_sleep)
+    worker = Worker()
+
+    try:
+        worker.run_forever(EmptyThenStopQueue(), idle_sleep_seconds=0.25)
+        raise AssertionError("expected test queue to stop the loop")
+    except KeyboardInterrupt:
+        pass
+
+    assert sleeps == [0.25]
+
+
+def test_worker_run_forever_logs_failed_queue_jobs(caplog: pytest.LogCaptureFixture) -> None:
+    event = _event()
+    job = EventJob(event=event, correlation_id="failed-forever", delivery_id="1700000000005-0")
+
+    class FailingOrchestrator:
+        def run(self, event: Event) -> PRWorkflowResult:
+            raise RuntimeError("terminal failure")
+
+    class FailingThenStopQueue:
+        def __init__(self) -> None:
+            self._jobs = [job]
+            self.acked: list[EventJob] = []
+
+        def enqueue(self, job: EventJob) -> None:
+            raise AssertionError("not used")
+
+        def dequeue(self) -> EventJob | None:
+            if self._jobs:
+                return self._jobs.pop(0)
+            raise KeyboardInterrupt
+
+        def ack(self, job: EventJob | MalformedEventJob) -> None:
+            assert isinstance(job, EventJob)
+            assert len(caplog.records) == 1
+            self.acked.append(job)
+
+    queue = FailingThenStopQueue()
+    worker = Worker(orchestrator=FailingOrchestrator(), max_attempts=1)
+
+    with caplog.at_level(logging.ERROR, logger="qaestro.src.app.worker.runner"):
+        try:
+            worker.run_forever(queue)
+            raise AssertionError("expected test queue to stop the loop")
+        except KeyboardInterrupt:
+            pass
+
+    assert queue.acked == [job]
+    assert len(caplog.records) == 1
+    record = cast(Any, caplog.records[0])
+    assert record.message == "worker job failed"
+    assert queue.acked[0] is job
+    assert record.correlation_id == "failed-forever"
+    assert record.delivery_id == "1700000000005-0"
+    assert record.attempts == 1
+    assert record.error == "terminal failure"
+
+
+def test_worker_acks_malformed_queue_jobs() -> None:
+    job = MalformedEventJob(delivery_id="1700000000003-0", error="bad json")
+
+    class AckRecordingQueue:
+        def __init__(self) -> None:
+            self._jobs = [job]
+            self.acked: list[MalformedEventJob] = []
+
+        def enqueue(self, job: EventJob) -> None:
+            raise AssertionError("not used")
+
+        def dequeue(self) -> MalformedEventJob | None:
+            if not self._jobs:
+                return None
+            return self._jobs.pop(0)
+
+        def ack(self, job: EventJob | MalformedEventJob) -> None:
+            assert isinstance(job, MalformedEventJob)
+            self.acked.append(job)
+
+    queue = AckRecordingQueue()
+    worker = Worker()
+
+    executions = worker.run_until_empty(queue)
+
+    assert executions[0].status == WorkerStatus.FAILED
+    assert "malformed queue message" in executions[0].error
+    assert queue.acked == [job]
 
 
 def test_queue_runs_until_empty_in_fifo_order() -> None:

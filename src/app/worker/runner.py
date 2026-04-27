@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeoutError
@@ -10,9 +11,12 @@ from typing import Protocol
 from src.adapters.renderers import PRCommentPayload
 from src.core.contracts import Event
 from src.runtime.orchestrator import EventOrchestrator, PRWorkflowResult
+from src.shared import get_logger
 
-from ..jobs import EventJob, JobQueue
+from ..jobs import EventJob, JobQueue, MalformedEventJob, QueuedJob
 from .types import WorkerExecution, WorkerExecutionContext, WorkerStatus
+
+logger = get_logger(__name__)
 
 
 class Orchestrator(Protocol):
@@ -59,7 +63,15 @@ class Worker:
         self._timeout_seconds = timeout_seconds
         self._agent_runner = agent_runner
 
-    def process(self, job: EventJob) -> WorkerExecution:
+    def process(self, job: QueuedJob) -> WorkerExecution:
+        if isinstance(job, MalformedEventJob):
+            return WorkerExecution(
+                correlation_id="",
+                status=WorkerStatus.FAILED,
+                attempts=0,
+                error=f"malformed queue message {job.delivery_id}: {job.error}",
+            )
+
         last_error = ""
         for attempt in range(1, self._max_attempts + 1):
             context = WorkerExecutionContext(
@@ -99,8 +111,49 @@ class Worker:
     def run_until_empty(self, queue: JobQueue) -> tuple[WorkerExecution, ...]:
         results: list[WorkerExecution] = []
         while (job := queue.dequeue()) is not None:
-            results.append(self.process(job))
+            execution = self.process(job)
+            results.append(execution)
+            queue.ack(job)
         return tuple(results)
+
+    def run_forever(self, queue: JobQueue, *, idle_sleep_seconds: float = 0.1) -> None:
+        """Continuously process jobs from a blocking queue.
+
+        Redis-backed queues block in ``dequeue()``. The small idle sleep keeps
+        accidental non-blocking queue usage from turning into a CPU busy loop.
+        """
+        while True:
+            if (job := queue.dequeue()) is None:
+                time.sleep(idle_sleep_seconds)
+                continue
+            execution = self.process(job)
+            if execution.status is WorkerStatus.FAILED:
+                self._log_failed_execution(job, execution)
+                queue.ack(job)
+                # Step 2 records terminal failures and acknowledges them so one
+                # poison job does not block the shared stream forever. A DLQ and
+                # metrics are planned for later operational hardening.
+                continue
+            queue.ack(job)
+
+    def _log_failed_execution(self, job: QueuedJob, execution: WorkerExecution) -> None:
+        delivery_id = job.delivery_id
+        correlation_id = execution.correlation_id
+        job_type = type(job).__name__
+        if isinstance(job, EventJob):
+            correlation_id = correlation_id or job.correlation_id
+            job_type = job.event.meta.event_type.value
+
+        logger.error(
+            "worker job failed",
+            extra={
+                "correlation_id": correlation_id,
+                "delivery_id": delivery_id,
+                "attempts": execution.attempts,
+                "error": execution.error,
+                "job_type": job_type,
+            },
+        )
 
     def _run_once(self, job: EventJob, context: WorkerExecutionContext) -> PRWorkflowResult:
         if context.timeout_seconds is not None:

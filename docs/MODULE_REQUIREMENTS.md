@@ -108,6 +108,7 @@ qaestro를 구현할 때 참고할 수 있는 모듈 단위 요구사항 문서.
 
 - 입력: GitHub webhook, 이후 Slack/Teams webhook
 - 출력: normalized event, enqueue 요청
+- Redis Streams 사용 시 출력: 별도 worker 프로세스가 소비할 shared stream message
 
 **필수 요구사항**
 
@@ -115,6 +116,7 @@ qaestro를 구현할 때 참고할 수 있는 모듈 단위 요구사항 문서.
 - 최소한 `PROpened`, `CICompleted` 이벤트 변환 지원
 - correlation id 또는 context key 생성
 - 재시도 가능한 방식으로 worker에 전달
+- gateway와 worker가 별도 프로세스로 실행될 때는 `InMemoryJobQueue`가 아니라 Redis Streams 기반 shared queue를 사용할 수 있어야 함
 
 **제외 범위**
 
@@ -131,6 +133,7 @@ qaestro를 구현할 때 참고할 수 있는 모듈 단위 요구사항 문서.
 **완료 기준**
 
 - GitHub 이벤트 하나를 받아 `app/worker`에서 처리 가능한 입력으로 넘길 수 있음
+- Redis Streams backend 설정 시 gateway process가 Redis stream에 job을 적재할 수 있음
 
 ### 4. `runtime/orchestrator`
 
@@ -185,6 +188,8 @@ qaestro를 구현할 때 참고할 수 있는 모듈 단위 요구사항 문서.
 **필수 요구사항**
 
 - queue job 실행
+- Redis Streams consumer group 기반 dequeue/ack
+- Redis Streams backend 사용 시 long-lived worker process로 실행
 - retry / timeout / failure reporting 기본 구조
 - Microsoft Agent Framework runner를 붙일 수 있는 실행 컨텍스트 제공
 
@@ -201,6 +206,7 @@ qaestro를 구현할 때 참고할 수 있는 모듈 단위 요구사항 문서.
 **완료 기준**
 
 - 단일 이벤트 기준으로 worker가 end-to-end loop를 완료할 수 있음
+- Redis Streams backend 설정 시 worker process가 같은 stream에서 job을 읽고 성공 처리 후 ack할 수 있음
 
 ### 6. `core/analyzer`
 

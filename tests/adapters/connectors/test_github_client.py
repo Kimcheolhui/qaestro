@@ -7,6 +7,7 @@ import threading
 from datetime import UTC, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn
+from typing import cast
 
 import pytest
 
@@ -56,7 +57,7 @@ def transport() -> FakeTransport:
 
 
 @pytest.fixture
-def client(private_key, transport) -> GitHubClient:
+def client(private_key: str, transport: FakeTransport) -> GitHubClient:
     auth = GitHubAppAuth(
         app_id=APP_ID,
         private_key=private_key,
@@ -356,21 +357,28 @@ def test_500_raises_generic_github_error(client, transport):
 
 
 def test_urllib_transport_does_not_follow_redirects_with_authorization():
-    seen: dict[str, object] = {"count": 0}
+    seen_count = 0
+    seen_path = ""
+    seen_authorization: str | None = None
 
     class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
         daemon_threads = True
 
     class RedirectHandler(BaseHTTPRequestHandler):
-        def do_GET(self):
-            seen["count"] = int(seen["count"]) + 1
-            seen.setdefault("path", self.path)
-            seen.setdefault("authorization", self.headers.get("Authorization"))
+        def do_GET(self) -> None:
+            nonlocal seen_authorization, seen_count, seen_path
+
+            seen_count += 1
+            if not seen_path:
+                seen_path = self.path
+            if seen_authorization is None:
+                seen_authorization = self.headers.get("Authorization")
             self.send_response(302)
-            self.send_header("Location", f"http://{self.server.server_address[0]}:{self.server.server_address[1]}/leak")
+            host, port = cast(tuple[str, int], self.server.server_address)
+            self.send_header("Location", f"http://{host}:{port}/leak")
             self.end_headers()
 
-        def log_message(self, format, *args):
+        def log_message(self, format: str, *args: object) -> None:
             pass
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), RedirectHandler)
@@ -388,4 +396,6 @@ def test_urllib_transport_does_not_follow_redirects_with_authorization():
         server.server_close()
 
     assert resp.status == 302
-    assert seen == {"count": 1, "path": "/start", "authorization": "Bearer secret"}
+    assert seen_count == 1
+    assert seen_path == "/start"
+    assert seen_authorization == "Bearer secret"

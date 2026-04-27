@@ -26,8 +26,18 @@ class _JsonFormatter(logging.Formatter):
         }
         if record.exc_info and record.exc_info[1] is not None:
             payload["exception"] = self.formatException(record.exc_info)
-        # Merge extra fields attached via ``logger.info("msg", extra={...})``
-        for key in ("correlation_id", "module_name", "event_type"):
+        # Merge extra fields attached via ``logger.info("msg", extra={...})``.
+        # Keep the whitelist explicit so logs stay predictable and don't leak
+        # arbitrary objects.
+        for key in (
+            "attempts",
+            "correlation_id",
+            "delivery_id",
+            "error",
+            "event_type",
+            "job_type",
+            "module_name",
+        ):
             value = getattr(record, key, None)
             if value is not None:
                 payload[key] = value

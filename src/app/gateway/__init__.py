@@ -6,7 +6,7 @@ re-exports the public gateway API and console-script entrypoint.
 
 from __future__ import annotations
 
-from ..jobs import EnqueueQueue, EventJob, InMemoryJobQueue, JobQueue
+from ..jobs import EnqueueQueue, EventJob, InMemoryJobQueue, JobQueue, RedisStreamsJobQueue
 from .entrypoint import main
 from .github import GitHubWebhookGateway, WebhookRequest, WebhookResponse
 from .server import WebhookHandler, create_github_webhook_server, make_github_webhook_handler, serve_github_webhook
@@ -17,6 +17,7 @@ __all__ = [
     "GitHubWebhookGateway",
     "InMemoryJobQueue",
     "JobQueue",
+    "RedisStreamsJobQueue",
     "WebhookHandler",
     "WebhookRequest",
     "WebhookResponse",

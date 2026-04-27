@@ -7,6 +7,7 @@ license = "MIT"
 requires-python = ">=3.12"
 dependencies = [
     "pyjwt[crypto]>=2.8",
+    "redis>=5.0",
 ]
 
 [project.scripts]
@@ -53,7 +54,11 @@ warn_unused_configs = true
 disallow_untyped_defs = true
 check_untyped_defs = true
 mypy_path = "."
-packages = ["src"]
+files = ["src", "tests"]
+
+[[tool.mypy.overrides]]
+module = "redis.*"
+ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "tests.*"
