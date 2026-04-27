@@ -82,7 +82,7 @@ def test_analyzer_escalates_high_risk_for_large_infra_and_config_changes() -> No
                 status="modified",
                 additions=180,
                 deletions=40,
-                patch="@@\n+resource \"azurerm_linux_web_app\" \"app\" {}\n",
+                patch='@@\n+resource "azurerm_linux_web_app" "app" {}\n',
             ),
             PRFileDiff(
                 path="config/production.yml",

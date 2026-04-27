@@ -181,7 +181,12 @@ def _confidence(risk: RiskLevel, matches: tuple[KnowledgeEntry, ...]) -> float:
 def _terms_from_title_and_impact(title: str, impact: BehaviourImpact) -> tuple[str, ...]:
     words = [word.strip(".,:;()[]{}#").lower() for word in title.split()]
     modules = [area.module.lower() for area in impact.areas]
-    file_terms = [part.lower() for area in impact.areas for file in area.affected_files for part in file.replace(".", "/").split("/")]
+    file_terms = [
+        part.lower()
+        for area in impact.areas
+        for file in area.affected_files
+        for part in file.replace(".", "/").split("/")
+    ]
     return tuple(dict.fromkeys(word for word in (*words, *modules, *file_terms) if len(word) >= 3))
 
 
