@@ -155,7 +155,9 @@ qaestro를 구현할 때 참고할 수 있는 모듈 단위 요구사항 문서.
 - PR 이벤트와 CI 이벤트를 같은 context로 묶을 수 있어야 함
 - Behaviour Analyzer -> Strategy Engine -> Runtime Validator -> Renderer 순서를 통제할 수 있어야 함
 - validation 실행 여부를 risk level, event type, policy 기준으로 분기할 수 있어야 함
-- 단계별로 agent에게 허용할 tool 범위를 정하고, read/write/destructive action을 구분할 수 있어야 함
+- 단계별로 agent 또는 deterministic runner에게 허용할 tool 범위를 정하고, read/write/destructive action을 구분할 수 있어야 함
+- 외부 webhook input event를 tool call로 대체하지 않고, normalized event를 workflow 시작점으로 유지해야 함
+- PR context read와 output write는 concrete provider/poster 주입이 아니라 ToolRuntime capability를 통해 실행 가능해야 함
 
 **제외 범위**
 
@@ -171,7 +173,50 @@ qaestro를 구현할 때 참고할 수 있는 모듈 단위 요구사항 문서.
 
 - core loop가 한 곳에서 추적 가능하고, 각 모듈이 독립 교체 가능함
 
-### 5. `app/worker`
+### 5. `runtime/tools`
+
+**우선순위**
+
+- `P0.5` (Step 3.5)
+
+**역할**
+
+- workflow 단계에서 사용할 외부 capability를 `ToolRuntime` 경계로 실행하는 계층
+- GitHub/ChatOps/knowledge/runtime validation 같은 provider 기능을 단계별 policy와 audit 가능한 tool call로 감싸는 공통 실행 경계
+
+**입력 / 출력**
+
+- 입력: normalized event에서 파생된 workflow context, stage name, tool call, correlation metadata
+- 출력: tool result, normalized context fragment, output action result, execution log
+
+**필수 요구사항**
+
+- `ToolCall`, `ToolResult`, `ToolRuntime`, stage별 allowed tool policy를 최소 contract로 제공
+- context/output 단계에서 GitHub PR read/write capability를 narrow tool로 실행 가능해야 함
+- GitHub backend는 기존 GitHub Client API adapter를 유지할 수 있어야 함
+- raw shell/CLI를 노출하지 않고, destructive action은 기본 금지해야 함
+- agent runner 도입 전에는 deterministic tool sequence로 실행 가능해야 함
+
+**제외 범위**
+
+- 외부 webhook event ingestion 대체
+- GitHub backend를 CLI로 전환
+- LLM/Agent Framework 기반 tool selection 구현
+- runtime validation probe 전체 구현
+
+**선행 조건**
+
+- `shared`
+- `core/contracts`
+- `adapters/connectors` (GitHub Client API backend)
+
+**완료 기준**
+
+- PR context acquisition과 PR comment write가 ToolRuntime을 통해 실행 가능
+- workflow stage별 allowed tools가 코드에서 강제됨
+- 기존 PR analysis vertical slice의 observable behavior가 유지됨
+
+### 6. `app/worker`
 
 **우선순위**
 
@@ -209,7 +254,7 @@ qaestro를 구현할 때 참고할 수 있는 모듈 단위 요구사항 문서.
 - 단일 이벤트 기준으로 worker가 end-to-end loop를 완료할 수 있음
 - Redis Streams backend 설정 시 worker process가 같은 stream에서 job을 읽고 성공 처리 후 ack할 수 있음
 
-### 6. `core/analyzer`
+### 7. `core/analyzer`
 
 **우선순위**
 
@@ -244,7 +289,7 @@ qaestro를 구현할 때 참고할 수 있는 모듈 단위 요구사항 문서.
 
 - 사람 리뷰 없이도 PR의 핵심 변경 요지를 구조화된 결과로 낼 수 있음
 
-### 7. `core/strategy`
+### 8. `core/strategy`
 
 **우선순위**
 
@@ -279,7 +324,7 @@ qaestro를 구현할 때 참고할 수 있는 모듈 단위 요구사항 문서.
 
 - 같은 analyzer 결과에 대해 일관된 전략 출력이 가능함
 
-### 8. `runtime/validator`
+### 9. `runtime/validator`
 
 **우선순위**
 
@@ -315,7 +360,7 @@ qaestro를 구현할 때 참고할 수 있는 모듈 단위 요구사항 문서.
 
 - 전략 결과를 실제 검증 결과로 연결할 수 있음
 
-### 9. `core/knowledge`
+### 10. `core/knowledge`
 
 **우선순위**
 
@@ -351,7 +396,7 @@ qaestro를 구현할 때 참고할 수 있는 모듈 단위 요구사항 문서.
 
 - mock adapter만으로도 `core/strategy`와 연결 가능
 
-### 10. `adapters/knowledge`
+### 11. `adapters/knowledge`
 
 **우선순위**
 
@@ -385,7 +430,7 @@ qaestro를 구현할 때 참고할 수 있는 모듈 단위 요구사항 문서.
 
 - 실제 backing store adapter가 동작하고 교체 가능함
 
-### 11. `adapters/renderers`
+### 12. `adapters/renderers`
 
 **우선순위**
 
@@ -420,7 +465,7 @@ qaestro를 구현할 때 참고할 수 있는 모듈 단위 요구사항 문서.
 
 - 같은 결과를 PR / chat 채널에 맞게 다르게 표현 가능
 
-### 12. `adapters/connectors`
+### 13. `adapters/connectors`
 
 **우선순위**
 
@@ -459,7 +504,7 @@ qaestro를 구현할 때 참고할 수 있는 모듈 단위 요구사항 문서.
 - P0: GitHub connector가 동작하고 mocking이 가능함
 - P1: ChatOps, LLM 등 추가 connector 교체 가능
 
-### 13. `app/cli`
+### 14. `app/cli`
 
 **우선순위**
 
@@ -494,7 +539,7 @@ qaestro를 구현할 때 참고할 수 있는 모듈 단위 요구사항 문서.
 
 - repo를 직접 읽지 않아도 설치 흐름을 따라갈 수 있음
 
-### 14. `tests/replay`
+### 15. `tests/replay`
 
 **우선순위**
 
@@ -547,9 +592,10 @@ qaestro를 구현할 때 참고할 수 있는 모듈 단위 요구사항 문서.
 | 1    | 공통 계약과 replay 기반 개발 틀   | `shared`, `core/contracts`, `tests/replay`                                                               | 샘플 payload → 공통 이벤트 변환, replay 테스트 1개 이상         |
 | 2    | Event → Worker → Output 골격 연결 | `app/gateway`, `app/worker`, `runtime/orchestrator`, `adapters/connectors`(GitHub), `adapters/renderers` | PR 이벤트 → worker → stub 결과 반환                             |
 | 3    | GitHub PR 분석 vertical slice     | `core/analyzer`, `core/strategy`, `core/knowledge`(interface+mock), `adapters/renderers`                 | PR 오픈 시 Behaviour Impact Report 자동 생성                    |
-| 4    | CI 결과 피드백 루프               | `runtime/orchestrator`, `core/strategy`, `adapters/renderers`                                            | CI 실패를 PR 맥락에 엮어 설명 가능                              |
-| 5    | Runtime Validation MVP            | `runtime/validator`, Microsoft Agent Framework 연결                                                      | 선택된 PR에 대해 runtime validation 실행 및 결과 반영           |
-| 6    | ChatOps 흐름 연결                 | `app/gateway`(chat), `adapters/connectors`(ChatOps), `adapters/renderers`                                | `@qaestro` 호출 시 전략 제안, PR 맥락과 연결                    |
+| 3.5  | Tool Runtime 경계 정리            | `runtime/tools`, `runtime/orchestrator`, `adapters/connectors`(GitHub), `app/worker`                     | PR read/write가 stage policy를 거친 ToolRuntime으로 실행        |
+| 4    | CI 결과 피드백 루프               | `runtime/orchestrator`, `runtime/tools`, `core/strategy`, `adapters/renderers`                           | CI 실패를 PR 맥락에 엮어 설명 가능                              |
+| 5    | Runtime Validation MVP            | `runtime/validator`, `runtime/tools`, Microsoft Agent Framework 연결                                     | 선택된 PR에 대해 runtime validation 실행 및 결과 반영           |
+| 6    | ChatOps 흐름 연결                 | `app/gateway`(chat), `runtime/tools`, `adapters/connectors`(ChatOps), `adapters/renderers`               | `@qaestro` 호출 시 전략 제안, PR 맥락과 연결                    |
 | 7    | Knowledge Store 실 adapter 적용   | `adapters/knowledge`, `core/strategy`                                                                    | 실제 backing store 연결, 과거 패턴 조회 가능, adapter 교체 가능 |
 | 8    | CLI와 self-hosted 설치 흐름       | `app/cli`                                                                                                | repo 소스 이해 없이 CLI로 설치/실행 가능                        |
 | 9    | 운영 안정화 및 베타 준비          | telemetry, permission, 문서                                                                              | 내부 dogfooding 또는 design partner 테스트 가능                 |
@@ -564,12 +610,13 @@ qaestro를 구현할 때 참고할 수 있는 모듈 단위 요구사항 문서.
 
 ### 권장 마일스톤
 
-| 마일스톤                   | 범위       | 결과                                     |
-| -------------------------- | ---------- | ---------------------------------------- |
-| A. GitHub-only 분석 MVP    | Step 0 ~ 4 | PR과 CI 결과에 대해 구조화된 QA 코멘트   |
-| B. Runtime Validation MVP  | Step 5     | 전략 판단을 실제 runtime 검증까지 연결   |
-| C. ChatOps + Knowledge MVP | Step 6 ~ 7 | 채널 호출과 지식 조회를 포함한 협업 흐름 |
-| D. Self-hosted 베타        | Step 8 ~ 9 | CLI 기반 설치와 내부 운영 가능           |
+| 마일스톤                   | 범위          | 결과                                      |
+| -------------------------- | ------------- | ----------------------------------------- |
+| A. GitHub-only 분석 MVP    | Step 0 ~ 4    | PR과 CI 결과에 대해 구조화된 QA 코멘트    |
+| A-1. Tool Runtime 경계     | Step 3.5      | read/write/validation tool boundary 정리  |
+| B. Runtime Validation MVP  | Step 5        | 전략 판단을 실제 runtime 검증까지 연결    |
+| C. ChatOps + Knowledge MVP | Step 6 ~ 7    | 채널 호출과 지식 조회를 포함한 협업 흐름  |
+| D. Self-hosted 베타        | Step 8 ~ 9    | CLI 기반 설치와 내부 운영 가능            |
 
 ### 각 단계의 Definition of Done
 

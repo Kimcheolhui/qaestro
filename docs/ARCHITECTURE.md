@@ -96,18 +96,28 @@ Redis backend 실행에 필요한 핵심 환경변수는 `QAESTRO_QUEUE_BACKEND=
 
 worker는 처리 중 ack되지 않은 message를 장애 복구 대상으로 `XAUTOCLAIM`할 수 있다. 기본 `QAESTRO_REDIS_CLAIM_IDLE_MS`는 300000ms(5분)로 둔다. 이 값이 실제 job 처리 시간보다 너무 작으면 정상 처리 중인 long-running job이 다른 worker에게 중복 claim될 수 있으므로, 운영에서는 worker timeout·LLM 호출 시간·GitHub posting 시간을 합친 최대 처리 시간보다 크게 설정해야 한다. retry가 모두 실패하거나 malformed payload를 만난 terminal failure는 stream을 막지 않도록 ack하되, worker가 `correlation_id`, `delivery_id`, `attempts`, `error`를 포함한 error log를 남긴다. DLQ와 metrics는 운영 안정화 단계에서 확장한다.
 
-### Tool autonomy boundary
+### Tool runtime boundary
 
-qaestro는 정해진 workflow를 따르되, 각 단계 안에서는 agent가 필요한 tool을 선택적으로 사용할 수 있게 한다. 이때 tool 사용 범위는 단계별로 제한한다.
+qaestro는 정해진 workflow를 따르되, 각 단계 안에서는 agent 또는 deterministic runner가 필요한 tool을 선택적으로 사용할 수 있게 한다. 이때 tool 사용 범위는 단계별 policy로 제한한다. 외부 webhook input event 자체는 tool call이 아니다. GitHub/ChatOps gateway는 raw provider payload를 검증하고 `PROpened`, `PRUpdated`, `CICompleted`, `ChatMention` 같은 normalized event로 바꾼 뒤 queue에 넣는 ingestion boundary로 남는다.
 
-| 단계 | 허용되는 tool 성격 |
-|------|-------------------|
-| Context acquisition | PR metadata/diff/files, PR comments/reviews, 관련 chat thread, knowledge read |
-| Analysis / strategy | 수집된 context, knowledge read, 제한된 추가 조회 |
-| Validation | strategy가 선택한 runtime probe/test execution |
-| Output | PR comment, review comment, chat response 같은 write action |
+```text
+normalized event
+→ workflow stage
+→ stage-approved ToolRuntime call
+→ provider adapter backend
+→ normalized context / output result
+```
+
+| 단계 | 허용되는 tool 성격 | Step 3.5 기준 예시 |
+|------|-------------------|--------------------|
+| Context acquisition | PR metadata/diff/files, PR comments/reviews, 관련 chat thread, knowledge read | `github.pr.view`, `github.pr.files`, `github.pr.diff` |
+| Analysis / strategy | 수집된 context, knowledge read, 제한된 추가 조회 | `knowledge.search` |
+| Validation | strategy가 선택한 runtime probe/test execution | 이후 Step 5에서 runtime probe tool 추가 |
+| Output | PR comment, review comment, chat response 같은 write action | `github.pr.comment.create_or_update` |
 
 Read tool은 맥락 수집과 판단을 돕기 위해 비교적 넓게 허용할 수 있지만, write tool은 output policy를 거쳐야 한다. destructive action은 기본 금지이며, comment 작성·knowledge write 같은 side effect는 correlation id와 중복 방지 정책을 함께 고려한다.
+
+Step 3.5에서는 GitHub backend를 기존 GitHub Client API adapter로 유지하고, raw shell/CLI를 열지 않는다. 목표는 transport 교체가 아니라 `Worker`/workflow가 GitHub-specific provider나 poster를 직접 잡지 않도록 read/write 실행 경계를 `ToolRuntime` 뒤로 옮기는 것이다. Agent Framework runner가 들어오기 전까지 tool 선택은 deterministic sequence로 시작하되, 같은 tool contract와 stage policy 위에서 나중에 agent 선택으로 교체할 수 있어야 한다.
 
 ### 2. Behaviour Analyzer
 
