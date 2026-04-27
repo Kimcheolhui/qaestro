@@ -3,17 +3,8 @@
 from __future__ import annotations
 
 from src.adapters.renderers import GitHubPRCommentRenderer, PRCommentPayload
-from src.core.analyzer import PRAnalysisContext, RuleBasedPRBehaviourAnalyzer
-from src.core.contracts import (
-    ActionType,
-    BehaviourImpact,
-    PREvent,
-    QAReport,
-    StrategyAction,
-    StrategyResult,
-    ValidationOutcome,
-    ValidationResult,
-)
+from src.core.analyzer import RuleBasedPRBehaviourAnalyzer
+from src.core.contracts import PREvent, QAReport, StrategyResult, ValidationOutcome, ValidationResult
 from src.core.strategy import RuleBasedPRStrategyEngine
 
 from .pr_context import EventPRContextProvider, PRContextProvider
@@ -29,7 +20,7 @@ from .types import (
 
 
 class PRWorkflowOrchestrator:
-    """Coordinate the PR-event workflow."""
+    """Coordinate context, analysis, strategy, validation, and rendering."""
 
     def __init__(
         self,
@@ -49,6 +40,7 @@ class PRWorkflowOrchestrator:
         self._should_validate = should_validate or (lambda event, impact, strategy: True)
 
     def run(self, event: PREvent) -> PRWorkflowResult:
+        """Run the deterministic Step 3 PR workflow for one normalized event."""
         stages: list[str] = []
 
         stages.append("context")
@@ -81,13 +73,8 @@ class PRWorkflowOrchestrator:
             validations=validations,
             summary_markdown=impact.summary,
         )
-
         stage_order = (*stages, "renderer")
-        draft = PRWorkflowDraft(
-            event=event,
-            report=report,
-            stage_order=stage_order,
-        )
+        draft = PRWorkflowDraft(event=event, report=report, stage_order=stage_order)
         comment_payload = self._renderer.render(draft)
         return PRWorkflowResult(
             event=event,
@@ -98,48 +85,13 @@ class PRWorkflowOrchestrator:
 
 
 class _DefaultDraftRenderer:
+    """Bridge the PR workflow draft contract to the GitHub comment renderer."""
+
     def __init__(self) -> None:
         self._renderer = GitHubPRCommentRenderer()
 
     def render(self, draft: PRWorkflowDraft) -> PRCommentPayload:
         return self._renderer.render(draft.report, correlation_id=draft.correlation_id)
-
-
-class StubPRBehaviourAnalyzer:
-    """Legacy placeholder analyzer kept for tests that inject stubs explicitly.
-
-    This is no longer the default Step 3 analyzer. It remains importable so older
-    extension tests can still exercise orchestrator replaceability.
-    """
-
-    def analyze(self, context: PRAnalysisContext) -> BehaviourImpact:
-        return RuleBasedPRBehaviourAnalyzer().analyze(context)
-
-
-class StubPRStrategyEngine:
-    """Legacy placeholder strategy engine kept for explicit compatibility tests."""
-
-    def plan(
-        self,
-        *,
-        repo_full_name: str,
-        pr_number: int,
-        title: str,
-        impact: BehaviourImpact,
-    ) -> StrategyResult:
-        del repo_full_name, pr_number, title
-        action = StrategyAction(
-            action_type=ActionType.CUSTOM,
-            description="Review Step 3 behaviour impact output",
-            target="behaviour-impact-report",
-            priority=0,
-            rationale="Compatibility stub; production default uses RuleBasedPRStrategyEngine.",
-        )
-        return StrategyResult(
-            actions=(action,),
-            reasoning="Compatibility stub strategy; production default uses RuleBasedPRStrategyEngine.",
-            confidence=0.0,
-        )
 
 
 class StubPRRuntimeValidator:

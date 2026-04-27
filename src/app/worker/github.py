@@ -6,7 +6,7 @@ from typing import Protocol
 
 from src.adapters.connectors.github import FileDiff, PRMeta
 from src.adapters.renderers import PRCommentPayload
-from src.core.analyzer import PRAnalysisContext, PRFileDiff
+from src.core.analyzer import PRAnalysisContext, PRFileDiff, PRFileStatus
 from src.core.contracts import PREvent
 
 
@@ -63,7 +63,7 @@ class GitHubPRContextProvider:
 def _normalize_file(file: FileDiff) -> PRFileDiff:
     return PRFileDiff(
         path=file.filename,
-        status=file.status,
+        status=PRFileStatus.normalize(file.status),
         additions=file.additions,
         deletions=file.deletions,
         patch=file.patch,

@@ -28,8 +28,8 @@ class RuleBasedPRStrategyEngine:
         matches = self._knowledge.search(
             KnowledgeQuery(
                 repo_full_name=repo_full_name,
-                domains=tuple(area.module for area in impact.areas),
-                terms=_terms_from_title_and_impact(title, impact),
+                topics=tuple(area.module for area in impact.areas),
+                search_terms=_terms_from_title_and_impact(title, impact),
             )
         )
         actions = (*_area_actions(impact), *_baseline_actions(impact), *_knowledge_actions(matches))
@@ -42,9 +42,11 @@ class RuleBasedPRStrategyEngine:
 
 
 def _area_actions(impact: BehaviourImpact) -> tuple[StrategyAction, ...]:
+    """Convert each impact surface into a deterministic validation suggestion."""
     actions: list[StrategyAction] = []
     for area in impact.areas:
-        if area.module == "api":
+        surface = area.module
+        if surface == "api":
             actions.append(
                 _action(
                     action_type=ActionType.VERIFY_API_CONTRACT,
@@ -54,7 +56,7 @@ def _area_actions(impact: BehaviourImpact) -> tuple[StrategyAction, ...]:
                     base_priority=3,
                 )
             )
-        elif area.module == "ui":
+        elif surface == "ui":
             actions.append(
                 _action(
                     action_type=ActionType.SMOKE_TEST,
@@ -64,7 +66,7 @@ def _area_actions(impact: BehaviourImpact) -> tuple[StrategyAction, ...]:
                     base_priority=3,
                 )
             )
-        elif area.module == "config":
+        elif surface == "config":
             actions.append(
                 _action(
                     action_type=ActionType.SMOKE_TEST,
@@ -74,7 +76,7 @@ def _area_actions(impact: BehaviourImpact) -> tuple[StrategyAction, ...]:
                     base_priority=3,
                 )
             )
-        elif area.module == "infra":
+        elif surface == "infra":
             actions.append(
                 _action(
                     action_type=ActionType.CUSTOM,
@@ -88,7 +90,7 @@ def _area_actions(impact: BehaviourImpact) -> tuple[StrategyAction, ...]:
             actions.append(
                 _action(
                     action_type=ActionType.RUN_TESTS,
-                    description="Run focused tests or review checks for the affected module",
+                    description="Run focused tests or review checks for the affected impact surface",
                     target=f"tests/{area.module}",
                     area=area,
                     base_priority=1,
@@ -155,7 +157,7 @@ def _action(
         description=description,
         target=target,
         priority=priority,
-        rationale=f"{area.module} area is {area.risk_level.value} risk; affected files: {files}",
+        rationale=f"{area.module} impact surface is {area.risk_level.value} risk; affected files: {files}",
     )
 
 
@@ -163,7 +165,7 @@ def _reasoning(impact: BehaviourImpact, matches: tuple[KnowledgeEntry, ...]) -> 
     risk_label = impact.overall_risk.value.capitalize()
     modules = ", ".join(area.module for area in impact.areas) or "none"
     knowledge_text = f" Knowledge matches: {', '.join(entry.key for entry in matches)}." if matches else ""
-    return f"{risk_label} risk based on affected areas: {modules}.{knowledge_text}"
+    return f"{risk_label} risk based on affected impact surfaces: {modules}.{knowledge_text}"
 
 
 def _confidence(risk: RiskLevel, matches: tuple[KnowledgeEntry, ...]) -> float:

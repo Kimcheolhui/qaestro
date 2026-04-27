@@ -7,20 +7,20 @@ from src.core.knowledge import InMemoryKnowledgeBase, KnowledgeEntry, KnowledgeQ
 from src.core.strategy import RuleBasedPRStrategyEngine
 
 
-def test_in_memory_knowledge_base_matches_repo_domains_and_terms_deterministically() -> None:
+def test_in_memory_knowledge_base_matches_repo_topics_and_search_terms_deterministically() -> None:
     knowledge = InMemoryKnowledgeBase(
         entries=(
             KnowledgeEntry(
                 key="payments-refund-contract",
                 summary="Payment refund API changes require refund contract checks.",
-                domains=("api", "payments"),
+                topics=("api", "payments"),
                 repos=("acme-corp/web-api",),
                 checklist_items=("Verify POST /refunds contract",),
             ),
             KnowledgeEntry(
                 key="other-repo-ui",
                 summary="Unrelated UI rule.",
-                domains=("ui",),
+                topics=("ui",),
                 repos=("other/repo",),
                 checklist_items=("Check UI manually",),
             ),
@@ -30,8 +30,8 @@ def test_in_memory_knowledge_base_matches_repo_domains_and_terms_deterministical
     matches = knowledge.search(
         KnowledgeQuery(
             repo_full_name="acme-corp/web-api",
-            domains=("api",),
-            terms=("refund",),
+            topics=("api",),
+            search_terms=("refund",),
         )
     )
 
@@ -63,7 +63,7 @@ def test_strategy_generates_deterministic_actions_from_risk_areas_and_knowledge(
             KnowledgeEntry(
                 key="refund-regression",
                 summary="Refund changes previously broke zero-amount edge cases.",
-                domains=("api", "ui"),
+                topics=("api", "ui"),
                 repos=("acme-corp/web-api",),
                 checklist_items=("Exercise zero-amount refund edge case",),
             ),
@@ -95,7 +95,7 @@ def test_strategy_generates_generic_actions_for_unknown_source_modules() -> None
         summary="Changed adapter module",
         areas=(
             ImpactArea(
-                module="adapters",
+                module="source",
                 description="modified src/adapters/connectors/github/client.py",
                 risk_level=RiskLevel.LOW,
                 affected_files=("src/adapters/connectors/github/client.py",),
@@ -113,5 +113,5 @@ def test_strategy_generates_generic_actions_for_unknown_source_modules() -> None
 
     assert result.actions
     assert result.actions[0].action_type is ActionType.RUN_TESTS
-    assert result.actions[0].target == "tests/adapters"
+    assert result.actions[0].target == "tests/source"
     assert result.actions[1].target == "tests/"

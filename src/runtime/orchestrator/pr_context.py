@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from src.core.analyzer import PRAnalysisContext, PRFileDiff
+from src.core.analyzer import PRAnalysisContext, PRFileDiff, PRFileStatus
 from src.core.contracts import PREvent
 
 
@@ -32,7 +32,7 @@ class EventPRContextProvider:
             files=tuple(
                 PRFileDiff(
                     path=file.path,
-                    status=file.status,
+                    status=PRFileStatus.normalize(file.status),
                     additions=file.additions,
                     deletions=file.deletions,
                     previous_filename=file.previous_filename,

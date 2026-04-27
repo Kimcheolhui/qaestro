@@ -2,11 +2,25 @@
 
 from __future__ import annotations
 
-from src.core.analyzer import PRAnalysisContext, PRFileDiff, RuleBasedPRBehaviourAnalyzer
+from src.core.analyzer import PRAnalysisContext, PRFileDiff, PRFileStatus, RuleBasedPRBehaviourAnalyzer
 from src.core.contracts import RiskLevel
 
 
-def test_analyzer_classifies_impact_areas_and_aggregates_medium_risk() -> None:
+def test_pr_file_diff_normalizes_status_and_documents_path_semantics() -> None:
+    file = PRAnalysisContext.file(
+        path="src/new_name.py",
+        status="renamed",
+        additions=3,
+        deletions=1,
+        previous_filename="src/old_name.py",
+    )
+
+    assert file.path == "src/new_name.py"
+    assert file.previous_filename == "src/old_name.py"
+    assert file.status is PRFileStatus.RENAMED
+
+
+def test_analyzer_classifies_impact_surfaces_and_aggregates_medium_risk() -> None:
     context = PRAnalysisContext(
         repo_full_name="acme-corp/web-api",
         pr_number=123,
@@ -17,21 +31,21 @@ def test_analyzer_classifies_impact_areas_and_aggregates_medium_risk() -> None:
         files=(
             PRFileDiff(
                 path="src/api/payments.py",
-                status="modified",
+                status=PRFileStatus.MODIFIED,
                 additions=40,
                 deletions=12,
                 patch="@@\n+@router.post('/refunds')\n+def refund():\n+    return service.refund()\n",
             ),
             PRFileDiff(
                 path="tests/api/test_payments.py",
-                status="modified",
+                status=PRFileStatus.MODIFIED,
                 additions=30,
                 deletions=0,
                 patch="@@\n+def test_refund(): ...\n",
             ),
             PRFileDiff(
                 path="README.md",
-                status="modified",
+                status=PRFileStatus.MODIFIED,
                 additions=5,
                 deletions=1,
                 patch="@@\n+Refund endpoint documented\n",
@@ -61,6 +75,44 @@ def test_analyzer_classifies_impact_areas_and_aggregates_medium_risk() -> None:
     ]
 
 
+def test_analyzer_groups_product_specific_source_paths_under_generic_source_surface() -> None:
+    context = PRAnalysisContext(
+        repo_full_name="Kimcheolhui/qaestro",
+        pr_number=125,
+        title="feat: update runtime wiring",
+        body="Changes orchestration internals.",
+        base_branch="main",
+        head_branch="feat/runtime",
+        files=(
+            PRFileDiff(
+                path="src/adapters/connectors/github/client.py",
+                status=PRFileStatus.MODIFIED,
+                additions=80,
+                deletions=20,
+            ),
+            PRFileDiff(
+                path="src/runtime/orchestrator/pr_workflow.py",
+                status=PRFileStatus.MODIFIED,
+                additions=25,
+                deletions=5,
+            ),
+        ),
+    )
+
+    impact = RuleBasedPRBehaviourAnalyzer().analyze(context)
+
+    assert [(area.module, area.risk_level, area.affected_files) for area in impact.areas] == [
+        (
+            "source",
+            RiskLevel.MEDIUM,
+            (
+                "src/adapters/connectors/github/client.py",
+                "src/runtime/orchestrator/pr_workflow.py",
+            ),
+        )
+    ]
+
+
 def test_analyzer_escalates_high_risk_for_large_infra_and_config_changes() -> None:
     context = PRAnalysisContext(
         repo_full_name="acme-corp/web-api",
@@ -72,21 +124,21 @@ def test_analyzer_escalates_high_risk_for_large_infra_and_config_changes() -> No
         files=(
             PRFileDiff(
                 path=".github/workflows/deploy.yml",
-                status="modified",
+                status=PRFileStatus.MODIFIED,
                 additions=80,
                 deletions=20,
                 patch="@@\n+permissions:\n+  contents: read\n+  deployments: write\n",
             ),
             PRFileDiff(
                 path="infra/terraform/main.tf",
-                status="modified",
+                status=PRFileStatus.MODIFIED,
                 additions=180,
                 deletions=40,
                 patch='@@\n+resource "azurerm_linux_web_app" "app" {}\n',
             ),
             PRFileDiff(
                 path="config/production.yml",
-                status="modified",
+                status=PRFileStatus.MODIFIED,
                 additions=35,
                 deletions=10,
                 patch="@@\n+feature_flags:\n+  refunds: true\n",

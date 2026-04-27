@@ -8,22 +8,30 @@ from typing import Protocol
 
 @dataclass(frozen=True)
 class KnowledgeEntry:
-    """A QA knowledge item that can influence strategy selection."""
+    """A QA knowledge item that can influence strategy selection.
+
+    ``topics`` are coarse matching tags such as impact surfaces, product areas,
+    or feature names. They are intentionally not tied to a single taxonomy.
+    """
 
     key: str
     summary: str
-    domains: tuple[str, ...] = ()
+    topics: tuple[str, ...] = ()
     repos: tuple[str, ...] = ()
     checklist_items: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
 class KnowledgeQuery:
-    """Provider-neutral query for matching QA knowledge."""
+    """Provider-neutral query for matching QA knowledge.
+
+    ``search_terms`` are free-text tokens extracted from PR title, changed files,
+    and impact output. A future adapter may translate them to BM25/vector search.
+    """
 
     repo_full_name: str
-    domains: tuple[str, ...] = ()
-    terms: tuple[str, ...] = ()
+    topics: tuple[str, ...] = ()
+    search_terms: tuple[str, ...] = ()
 
 
 class KnowledgeBase(Protocol):
@@ -43,26 +51,28 @@ class InMemoryKnowledgeBase:
         self._entries = entries
 
     def search(self, query: KnowledgeQuery) -> tuple[KnowledgeEntry, ...]:
-        query_domains = {domain.lower() for domain in query.domains}
-        query_terms = {term.lower() for term in query.terms if term.strip()}
+        """Return entries matching repo scope plus optional topics/text terms."""
+        query_topics = {topic.lower() for topic in query.topics}
+        query_terms = {term.lower() for term in query.search_terms if term.strip()}
         matches: list[KnowledgeEntry] = []
         for entry in self._entries:
             if entry.repos and query.repo_full_name not in entry.repos:
                 continue
-            entry_domains = {domain.lower() for domain in entry.domains}
-            domain_match = not query_domains or bool(query_domains & entry_domains)
+            entry_topics = {topic.lower() for topic in entry.topics}
+            topic_match = not query_topics or bool(query_topics & entry_topics)
             term_match = not query_terms or _entry_matches_terms(entry, query_terms)
-            if domain_match and term_match:
+            if topic_match and term_match:
                 matches.append(entry)
         return tuple(sorted(matches, key=lambda entry: entry.key))
 
 
 def _entry_matches_terms(entry: KnowledgeEntry, terms: set[str]) -> bool:
+    """Search the in-memory entry fields with simple substring matching."""
     haystack = " ".join(
         (
             entry.key,
             entry.summary,
-            " ".join(entry.domains),
+            " ".join(entry.topics),
             " ".join(entry.checklist_items),
         )
     ).lower()
