@@ -259,6 +259,22 @@ def test_redis_streams_queue_returns_malformed_job_for_bad_payload() -> None:
     assert restored.error
 
 
+def test_redis_streams_queue_returns_malformed_job_for_invalid_event_field_type() -> None:
+    redis = FakeRedis()
+    queue = _queue(redis)
+    original = EventJob(event=_pr_opened(), correlation_id="corr-pr_opened")
+
+    queue.enqueue(original)
+    fields = _stored_job_payload(redis)
+    payload = fields[b"job"].decode("utf-8").replace('"pr_number":34', '"pr_number":"not-an-int"')
+    redis.new_messages.append((b"1700000000006-0", {b"job": payload.encode("utf-8")}))
+    restored = queue.dequeue()
+
+    assert isinstance(restored, MalformedEventJob)
+    assert restored.delivery_id == "1700000000006-0"
+    assert "pr_number" in restored.error
+
+
 def test_redis_streams_queue_returns_malformed_job_for_wrong_json_shape() -> None:
     redis = FakeRedis()
     queue = _queue(redis)

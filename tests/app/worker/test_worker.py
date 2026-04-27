@@ -262,6 +262,7 @@ def test_worker_run_forever_logs_failed_queue_jobs(caplog: pytest.LogCaptureFixt
 
         def ack(self, job: EventJob | MalformedEventJob) -> None:
             assert isinstance(job, EventJob)
+            assert len(caplog.records) == 1
             self.acked.append(job)
 
     queue = FailingThenStopQueue()
@@ -278,6 +279,7 @@ def test_worker_run_forever_logs_failed_queue_jobs(caplog: pytest.LogCaptureFixt
     assert len(caplog.records) == 1
     record = cast(Any, caplog.records[0])
     assert record.message == "worker job failed"
+    assert queue.acked[0] is job
     assert record.correlation_id == "failed-forever"
     assert record.delivery_id == "1700000000005-0"
     assert record.attempts == 1

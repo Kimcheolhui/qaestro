@@ -127,13 +127,14 @@ class Worker:
                 time.sleep(idle_sleep_seconds)
                 continue
             execution = self.process(job)
-            queue.ack(job)
             if execution.status is WorkerStatus.FAILED:
                 self._log_failed_execution(job, execution)
+                queue.ack(job)
                 # Step 2 records terminal failures and acknowledges them so one
                 # poison job does not block the shared stream forever. A DLQ and
                 # metrics are planned for later operational hardening.
                 continue
+            queue.ack(job)
 
     def _log_failed_execution(self, job: QueuedJob, execution: WorkerExecution) -> None:
         delivery_id = job.delivery_id

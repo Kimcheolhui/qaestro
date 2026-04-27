@@ -259,11 +259,16 @@ def _serialize_job(job: EventJob) -> str:
 
 def _deserialize_job(payload: str, *, delivery_id: str = "") -> EventJob:
     data = json.loads(payload)
+    _require_mapping(data, "job")
     schema_version = data.get("schema_version")
     if schema_version != 1:
         raise ValueError(f"Unsupported job schema version: {schema_version!r}")
-    event = _event_from_payload(data["event"])
-    return EventJob(event=event, correlation_id=str(data["correlation_id"]), delivery_id=delivery_id)
+    event = _event_from_payload(_require_mapping(data.get("event"), "event"))
+    return EventJob(
+        event=event,
+        correlation_id=_require_str(data.get("correlation_id"), "correlation_id"),
+        delivery_id=delivery_id,
+    )
 
 
 def _event_to_payload(event: Event) -> dict[str, Any]:
@@ -278,46 +283,137 @@ def _event_to_payload(event: Event) -> dict[str, Any]:
 
 
 def _event_from_payload(data: Mapping[str, Any]) -> Event:
-    kind = EventType(str(data["kind"]))
-    meta = _meta_from_payload(data["meta"])
+    kind = EventType(_require_str(data.get("kind"), "kind"))
+    meta = _meta_from_payload(_require_mapping(data.get("meta"), "meta"))
     if kind in {EventType.PR_OPENED, EventType.PR_UPDATED}:
         pr_event = _pr_event_from_payload(kind, meta, data)
         if isinstance(pr_event, PROpened | PRUpdated):
             return pr_event
         raise ValueError(f"Unsupported PR event type: {kind.value}")
     if kind is EventType.PR_COMMENTED:
-        return PRCommented(meta=meta, **_without(data, "kind", "meta"))
+        return PRCommented(
+            meta=meta,
+            repo_full_name=_require_str(data.get("repo_full_name"), "repo_full_name"),
+            pr_number=_require_int(data.get("pr_number"), "pr_number"),
+            comment_id=_require_int(data.get("comment_id"), "comment_id"),
+            author=_require_str(data.get("author"), "author"),
+            body=_require_str(data.get("body"), "body"),
+            is_review_comment=_require_bool(data.get("is_review_comment", False), "is_review_comment"),
+            path=_require_str(data.get("path", ""), "path"),
+            line=_optional_int(data.get("line"), "line"),
+        )
     if kind is EventType.PR_REVIEWED:
-        return PRReviewed(meta=meta, **_without(data, "kind", "meta"))
+        return PRReviewed(
+            meta=meta,
+            repo_full_name=_require_str(data.get("repo_full_name"), "repo_full_name"),
+            pr_number=_require_int(data.get("pr_number"), "pr_number"),
+            reviewer=_require_str(data.get("reviewer"), "reviewer"),
+            state=_require_str(data.get("state"), "state"),
+            body=_require_str(data.get("body", ""), "body"),
+        )
     if kind is EventType.CI_COMPLETED:
-        values = _without(data, "kind", "meta")
-        values["failed_jobs"] = tuple(values.get("failed_jobs", ()))
-        return CICompleted(meta=meta, **values)
+        return CICompleted(
+            meta=meta,
+            repo_full_name=_require_str(data.get("repo_full_name"), "repo_full_name"),
+            pr_number=_optional_int(data.get("pr_number"), "pr_number"),
+            commit_sha=_require_str(data.get("commit_sha"), "commit_sha"),
+            workflow_name=_require_str(data.get("workflow_name"), "workflow_name"),
+            conclusion=_require_str(data.get("conclusion"), "conclusion"),
+            run_url=_require_str(data.get("run_url"), "run_url"),
+            failed_jobs=_str_tuple(data.get("failed_jobs", ()), "failed_jobs"),
+            logs_url=_require_str(data.get("logs_url", ""), "logs_url"),
+        )
     if kind is EventType.CHAT_MENTION:
-        return ChatMention(meta=meta, **_without(data, "kind", "meta"))
+        return ChatMention(
+            meta=meta,
+            platform=_require_str(data.get("platform"), "platform"),
+            channel_id=_require_str(data.get("channel_id"), "channel_id"),
+            channel_name=_require_str(data.get("channel_name"), "channel_name"),
+            author=_require_str(data.get("author"), "author"),
+            message=_require_str(data.get("message"), "message"),
+            thread_id=_require_str(data.get("thread_id", ""), "thread_id"),
+            referenced_pr=_optional_int(data.get("referenced_pr"), "referenced_pr"),
+        )
     raise ValueError(f"Unsupported event type: {kind.value}")
 
 
 def _pr_event_from_payload(kind: EventType, meta: EventMeta, data: Mapping[str, Any]) -> PREvent:
-    values = _without(data, "kind", "meta")
-    values["files_changed"] = tuple(FileChange(**file_data) for file_data in values.get("files_changed", ()))
+    file_values = data.get("files_changed", ())
+    if not isinstance(file_values, list | tuple):
+        raise TypeError("files_changed must be a list or tuple")
     event_cls = PROpened if kind is EventType.PR_OPENED else PRUpdated
-    return event_cls(meta=meta, **values)
+    return event_cls(
+        meta=meta,
+        repo_full_name=_require_str(data.get("repo_full_name"), "repo_full_name"),
+        pr_number=_require_int(data.get("pr_number"), "pr_number"),
+        title=_require_str(data.get("title"), "title"),
+        body=_require_str(data.get("body"), "body"),
+        author=_require_str(data.get("author"), "author"),
+        base_branch=_require_str(data.get("base_branch"), "base_branch"),
+        head_branch=_require_str(data.get("head_branch"), "head_branch"),
+        diff_url=_require_str(data.get("diff_url"), "diff_url"),
+        files_changed=tuple(
+            _file_change_from_payload(file_data, f"files_changed[{index}]")
+            for index, file_data in enumerate(file_values)
+        ),
+    )
+
+
+def _file_change_from_payload(data: object, field: str) -> FileChange:
+    values = _require_mapping(data, field)
+    return FileChange(
+        path=_require_str(values.get("path"), f"{field}.path"),
+        status=_require_str(values.get("status"), f"{field}.status"),
+        additions=_require_int(values.get("additions", 0), f"{field}.additions"),
+        deletions=_require_int(values.get("deletions", 0), f"{field}.deletions"),
+        previous_filename=_require_str(values.get("previous_filename", ""), f"{field}.previous_filename"),
+    )
 
 
 def _meta_from_payload(data: Mapping[str, Any]) -> EventMeta:
     return EventMeta(
-        event_id=str(data["event_id"]),
-        event_type=EventType(str(data["event_type"])),
-        correlation_id=str(data["correlation_id"]),
-        timestamp=datetime.fromisoformat(str(data["timestamp"])),
-        source=EventSource(str(data["source"])),
+        event_id=_require_str(data.get("event_id"), "meta.event_id"),
+        event_type=EventType(_require_str(data.get("event_type"), "meta.event_type")),
+        correlation_id=_require_str(data.get("correlation_id"), "meta.correlation_id"),
+        timestamp=datetime.fromisoformat(_require_str(data.get("timestamp"), "meta.timestamp")),
+        source=EventSource(_require_str(data.get("source"), "meta.source")),
     )
 
 
-def _without(data: Mapping[str, Any], *keys: str) -> dict[str, Any]:
-    omitted = set(keys)
-    return {str(key): value for key, value in data.items() if key not in omitted}
+def _require_mapping(value: object, field: str) -> Mapping[str, Any]:
+    if not isinstance(value, Mapping):
+        raise TypeError(f"{field} must be an object")
+    return {str(key): item for key, item in value.items()}
+
+
+def _require_str(value: object, field: str) -> str:
+    if not isinstance(value, str):
+        raise TypeError(f"{field} must be a string")
+    return value
+
+
+def _require_int(value: object, field: str) -> int:
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise TypeError(f"{field} must be an integer")
+    return value
+
+
+def _optional_int(value: object, field: str) -> int | None:
+    if value is None:
+        return None
+    return _require_int(value, field)
+
+
+def _require_bool(value: object, field: str) -> bool:
+    if not isinstance(value, bool):
+        raise TypeError(f"{field} must be a boolean")
+    return value
+
+
+def _str_tuple(value: object, field: str) -> tuple[str, ...]:
+    if not isinstance(value, list | tuple):
+        raise TypeError(f"{field} must be a list or tuple")
+    return tuple(_require_str(item, f"{field}[{index}]") for index, item in enumerate(value))
 
 
 def _field_value(fields: Mapping[Any, Any], key: str) -> str:

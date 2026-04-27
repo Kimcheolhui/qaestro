@@ -92,7 +92,7 @@ Agent가 채널을 상시 모니터링하지 않음. 개발자가 필요할 때 
 
 `InMemoryJobQueue`는 테스트와 단일 프로세스 local wiring용이다. gateway와 worker를 별도 프로세스로 실행하면 각 프로세스의 메모리가 분리되므로 같은 queue를 공유하지 못한다. self-hosted MVP에서 실제 프로세스 분리를 검증할 때는 Redis Streams backend를 사용한다. Redis Streams는 `EventJob` payload를 durable하게 보관하고, worker consumer group이 처리 후 ack하는 경계로 동작한다.
 
-Redis backend 실행에 필요한 핵심 환경변수는 `QAESTRO_QUEUE_BACKEND=redis-streams`, `QAESTRO_REDIS_URL`, `QAESTRO_REDIS_STREAM`, `QAESTRO_REDIS_CONSUMER_GROUP`이다. gateway와 worker는 같은 URL/stream/group을 봐야 하고, worker process는 long-lived consumer로 실행된다. `QAESTRO_REDIS_CONSUMER`를 지정하지 않으면 worker가 `hostname-pid` 형태의 process-unique consumer name을 사용해 multi-worker 관측성을 유지한다.
+Redis backend 실행에 필요한 핵심 환경변수는 `QAESTRO_QUEUE_BACKEND=redis-streams`, `QAESTRO_REDIS_URL`, `QAESTRO_REDIS_STREAM`, `QAESTRO_REDIS_CONSUMER_GROUP`이다. gateway와 worker는 같은 URL/stream/group을 봐야 하고, worker process는 long-lived consumer로 실행된다. `QAESTRO_REDIS_CONSUMER`를 지정하지 않으면 worker가 `hostname-pid` 형태의 process-unique consumer name을 사용해 multi-worker 관측성을 유지한다. Redis worker는 처리 완료 후 실제 PR comment를 게시해야 하므로 `QAESTRO_GITHUB_APP_ID`, `QAESTRO_GITHUB_APP_INSTALLATION_ID`, `QAESTRO_GITHUB_APP_PRIVATE_KEY_PATH`도 함께 설정되어야 한다.
 
 worker는 처리 중 ack되지 않은 message를 장애 복구 대상으로 `XAUTOCLAIM`할 수 있다. 기본 `QAESTRO_REDIS_CLAIM_IDLE_MS`는 300000ms(5분)로 둔다. 이 값이 실제 job 처리 시간보다 너무 작으면 정상 처리 중인 long-running job이 다른 worker에게 중복 claim될 수 있으므로, 운영에서는 worker timeout·LLM 호출 시간·GitHub posting 시간을 합친 최대 처리 시간보다 크게 설정해야 한다. retry가 모두 실패하거나 malformed payload를 만난 terminal failure는 stream을 막지 않도록 ack하되, worker가 `correlation_id`, `delivery_id`, `attempts`, `error`를 포함한 error log를 남긴다. DLQ와 metrics는 운영 안정화 단계에서 확장한다.
 
