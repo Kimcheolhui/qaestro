@@ -5,9 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from src.adapters.connectors.github import GitHubAppAuth, GitHubClient
+from src.runtime.orchestrator import EventOrchestrator, PRWorkflowOrchestrator
 from src.shared.config import AppConfig
 
-from .github import GitHubCommentPoster
+from .github import GitHubCommentPoster, GitHubPRContextProvider
 from .runner import NoopCommentPoster, Worker
 
 
@@ -21,7 +22,13 @@ def build_worker(cfg: AppConfig) -> Worker:
     if cfg.queue_backend == "memory":
         return Worker(comment_poster=NoopCommentPoster())
 
-    return Worker(comment_poster=GitHubCommentPoster(_build_github_client(cfg)))
+    client = _build_github_client(cfg)
+    return Worker(
+        orchestrator=EventOrchestrator(
+            pr_orchestrator=PRWorkflowOrchestrator(context_provider=GitHubPRContextProvider(client))
+        ),
+        comment_poster=GitHubCommentPoster(client),
+    )
 
 
 def _build_github_client(cfg: AppConfig) -> GitHubClient:

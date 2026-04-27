@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from src.adapters.renderers import PRCommentPayload
+from src.core.analyzer import PRAnalysisContext
 from src.core.contracts import BehaviourImpact, PREvent, QAReport, StrategyResult, ValidationResult
 
 
@@ -77,15 +78,22 @@ class PRWorkflowRenderer(Protocol):
 
 
 class PRBehaviourAnalyzer(Protocol):
-    """Analyze PR events into behaviour impact output."""
+    """Analyze normalized PR context into behaviour impact output."""
 
-    def analyze(self, event: PREvent) -> BehaviourImpact: ...
+    def analyze(self, context: PRAnalysisContext) -> BehaviourImpact: ...
 
 
 class PRStrategyEngine(Protocol):
     """Choose PR workflow strategy actions from analysed impact."""
 
-    def plan(self, event: PREvent, impact: BehaviourImpact) -> StrategyResult: ...
+    def plan(
+        self,
+        *,
+        repo_full_name: str,
+        pr_number: int,
+        title: str,
+        impact: BehaviourImpact,
+    ) -> StrategyResult: ...
 
 
 class PRRuntimeValidator(Protocol):

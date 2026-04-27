@@ -127,7 +127,7 @@ def test_event_orchestrator_dispatches_pr_events_to_pr_sub_orchestrator():
     assert isinstance(result, PRWorkflowResult)
     assert result.event is event
     assert result.correlation_id == "corr-001"
-    assert result.stage_order == ("analyzer", "strategy", "validator", "renderer")
+    assert result.stage_order == ("context", "analyzer", "strategy", "validator", "renderer")
     assert result.comment_payload.repo_full_name == "Kimcheolhui/qaestro"
     assert result.comment_payload.pr_number == 31
 
@@ -166,10 +166,10 @@ def test_pr_workflow_orchestrator_runs_stub_flow_and_renders_pr_comment_payload(
     assert isinstance(result, PRWorkflowResult)
     assert result.event is event
     assert result.correlation_id == "corr-001"
-    assert result.stage_order == ("analyzer", "strategy", "validator", "renderer")
-    assert result.impact.summary == "Step 2 stub analysis for PR #31: feat: add connector"
-    assert result.strategy.reasoning == "Step 2 stub strategy; real strategy is introduced in Step 3."
-    assert len(result.validations) == 1
+    assert result.stage_order == ("context", "analyzer", "strategy", "validator", "renderer")
+    assert result.impact.summary.startswith("PR #31 (feat: add connector) changes 2 files")
+    assert result.strategy.reasoning.startswith("Low risk")
+    assert len(result.validations) == 3
     assert result.comment_payload.repo_full_name == "Kimcheolhui/qaestro"
     assert result.comment_payload.pr_number == 31
     assert "feat: add connector" in result.comment_payload.body
@@ -208,8 +208,8 @@ def test_pr_workflow_orchestrator_can_skip_validation_via_policy_hook():
     result = orchestrator.run(_pr_opened_event())
 
     assert result.validations == ()
-    assert result.stage_order == ("analyzer", "strategy", "renderer")
-    assert "Validation skipped" in result.comment_payload.body
+    assert result.stage_order == ("context", "analyzer", "strategy", "renderer")
+    assert "Validation not executed" in result.comment_payload.body
 
 
 def test_pr_workflow_orchestrator_accepts_replaceable_components():
@@ -217,8 +217,8 @@ def test_pr_workflow_orchestrator_accepts_replaceable_components():
         def __init__(self) -> None:
             self.events: list[PREvent] = []
 
-        def analyze(self, event: PREvent) -> BehaviourImpact:
-            self.events.append(event)
+        def analyze(self, context: object) -> BehaviourImpact:
+            self.events.append(context)  # type: ignore[arg-type]
             return BehaviourImpact(
                 summary="custom impact",
                 areas=(
@@ -233,10 +233,17 @@ def test_pr_workflow_orchestrator_accepts_replaceable_components():
 
     class RecordingStrategyEngine:
         def __init__(self) -> None:
-            self.calls: list[tuple[PREvent, BehaviourImpact]] = []
+            self.calls: list[tuple[str, int, str, BehaviourImpact]] = []
 
-        def plan(self, event: PREvent, impact: BehaviourImpact) -> StrategyResult:
-            self.calls.append((event, impact))
+        def plan(
+            self,
+            *,
+            repo_full_name: str,
+            pr_number: int,
+            title: str,
+            impact: BehaviourImpact,
+        ) -> StrategyResult:
+            self.calls.append((repo_full_name, pr_number, title, impact))
             return StrategyResult(
                 actions=(
                     StrategyAction(
@@ -269,9 +276,9 @@ def test_pr_workflow_orchestrator_accepts_replaceable_components():
 
     result = orchestrator.run(event)
 
-    assert analyzer.events == [event]
-    assert strategy_engine.calls == [(event, result.impact)]
+    assert analyzer.events[0].repo_full_name == event.repo_full_name
+    assert strategy_engine.calls == [(event.repo_full_name, event.pr_number, event.title, result.impact)]
     assert validator.calls == [result.strategy]
     assert result.impact.summary == "custom impact"
     assert result.strategy.reasoning == "custom strategy"
-    assert result.stage_order == ("analyzer", "strategy", "validator", "renderer")
+    assert result.stage_order == ("context", "analyzer", "strategy", "validator", "renderer")

@@ -3,19 +3,20 @@
 from __future__ import annotations
 
 from src.adapters.renderers import GitHubPRCommentRenderer, PRCommentPayload
+from src.core.analyzer import PRAnalysisContext, RuleBasedPRBehaviourAnalyzer
 from src.core.contracts import (
     ActionType,
     BehaviourImpact,
-    ImpactArea,
     PREvent,
     QAReport,
-    RiskLevel,
     StrategyAction,
     StrategyResult,
     ValidationOutcome,
     ValidationResult,
 )
+from src.core.strategy import RuleBasedPRStrategyEngine
 
+from .pr_context import EventPRContextProvider, PRContextProvider
 from .types import (
     PRBehaviourAnalyzer,
     PRRuntimeValidator,
@@ -28,25 +29,21 @@ from .types import (
 
 
 class PRWorkflowOrchestrator:
-    """Coordinate the PR-event workflow.
-
-    The default analyzer, strategy engine, and validator are stub components
-    until later milestones replace them with real implementations. They are
-    injected through protocols so each stage can be replaced independently
-    without changing the orchestration sequence.
-    """
+    """Coordinate the PR-event workflow."""
 
     def __init__(
         self,
         *,
+        context_provider: PRContextProvider | None = None,
         analyzer: PRBehaviourAnalyzer | None = None,
         strategy_engine: PRStrategyEngine | None = None,
         validator: PRRuntimeValidator | None = None,
         renderer: PRWorkflowRenderer | None = None,
         should_validate: ShouldValidate | None = None,
     ) -> None:
-        self._analyzer = analyzer or StubPRBehaviourAnalyzer()
-        self._strategy_engine = strategy_engine or StubPRStrategyEngine()
+        self._context_provider = context_provider or EventPRContextProvider()
+        self._analyzer = analyzer or RuleBasedPRBehaviourAnalyzer()
+        self._strategy_engine = strategy_engine or RuleBasedPRStrategyEngine()
         self._validator = validator or StubPRRuntimeValidator()
         self._renderer = renderer or _DefaultDraftRenderer()
         self._should_validate = should_validate or (lambda event, impact, strategy: True)
@@ -54,11 +51,19 @@ class PRWorkflowOrchestrator:
     def run(self, event: PREvent) -> PRWorkflowResult:
         stages: list[str] = []
 
+        stages.append("context")
+        context = self._context_provider.load(event)
+
         stages.append("analyzer")
-        impact = self._analyzer.analyze(event)
+        impact = self._analyzer.analyze(context)
 
         stages.append("strategy")
-        strategy = self._strategy_engine.plan(event, impact)
+        strategy = self._strategy_engine.plan(
+            repo_full_name=context.repo_full_name,
+            pr_number=context.pr_number,
+            title=context.title,
+            impact=impact,
+        )
 
         validations: tuple[ValidationResult, ...]
         if self._should_validate(event, impact, strategy):
@@ -69,8 +74,8 @@ class PRWorkflowOrchestrator:
 
         report = QAReport(
             event_id=event.meta.event_id,
-            repo_full_name=event.repo_full_name,
-            pr_number=event.pr_number,
+            repo_full_name=context.repo_full_name,
+            pr_number=context.pr_number,
             impact=impact,
             strategy=strategy,
             validations=validations,
@@ -101,62 +106,38 @@ class _DefaultDraftRenderer:
 
 
 class StubPRBehaviourAnalyzer:
-    """Placeholder PR analyzer until real risk evaluation lands.
+    """Legacy placeholder analyzer kept for tests that inject stubs explicitly.
 
-    The LOW risk values below are not risk decisions. They are deliberately
-    neutral placeholders so Step 2 can exercise the orchestration contract.
-    Replace this component with core analyzer/risk-evaluation logic in the
-    Behaviour Impact Report milestone.
+    This is no longer the default Step 3 analyzer. It remains importable so older
+    extension tests can still exercise orchestrator replaceability.
     """
 
-    def analyze(self, event: PREvent) -> BehaviourImpact:
-        areas = tuple(
-            ImpactArea(
-                module=_module_for_file(change.path),
-                description=f"{change.status} {change.path}",
-                # Stub only: do not treat this as a real per-file risk score.
-                # Later analyzer logic must evaluate risk from diff semantics,
-                # affected modules, test coverage, runtime ownership, and history.
-                risk_level=RiskLevel.LOW,
-                affected_files=(change.path,),
-            )
-            for change in event.files_changed
-        )
-        return BehaviourImpact(
-            summary=f"Step 2 stub analysis for PR #{event.pr_number}: {event.title}",
-            areas=areas,
-            # Stub only: overall risk is fixed to LOW until actual risk aggregation
-            # is implemented from the analyzer output.
-            overall_risk=RiskLevel.LOW,
-            raw_diff_stats={
-                "files_changed": len(event.files_changed),
-                "additions": sum(change.additions for change in event.files_changed),
-                "deletions": sum(change.deletions for change in event.files_changed),
-            },
-        )
+    def analyze(self, context: PRAnalysisContext) -> BehaviourImpact:
+        return RuleBasedPRBehaviourAnalyzer().analyze(context)
 
 
 class StubPRStrategyEngine:
-    """Placeholder PR strategy engine until real strategy selection is wired.
+    """Legacy placeholder strategy engine kept for explicit compatibility tests."""
 
-    The CUSTOM action and zero confidence below only document that the pipeline
-    reached the strategy stage. They must be replaced by real behaviour-checklist
-    and validation-plan selection logic.
-    """
-
-    def plan(self, event: PREvent, impact: BehaviourImpact) -> StrategyResult:
+    def plan(
+        self,
+        *,
+        repo_full_name: str,
+        pr_number: int,
+        title: str,
+        impact: BehaviourImpact,
+    ) -> StrategyResult:
+        del repo_full_name, pr_number, title
         action = StrategyAction(
-            # Stub only: this is not the final action taxonomy selection.
             action_type=ActionType.CUSTOM,
-            description="Review Step 2 stub output",
-            target=f"{event.repo_full_name}#{event.pr_number}",
+            description="Review Step 3 behaviour impact output",
+            target="behaviour-impact-report",
             priority=0,
-            rationale="Step 2 wires the workflow only; real strategy is introduced in Step 3.",
+            rationale="Compatibility stub; production default uses RuleBasedPRStrategyEngine.",
         )
         return StrategyResult(
             actions=(action,),
-            reasoning="Step 2 stub strategy; real strategy is introduced in Step 3.",
-            # Stub only: confidence is unknown until strategy scoring exists.
+            reasoning="Compatibility stub strategy; production default uses RuleBasedPRStrategyEngine.",
             confidence=0.0,
         )
 
@@ -173,19 +154,8 @@ class StubPRRuntimeValidator:
         return tuple(
             ValidationResult(
                 action=action,
-                # Stub only: every action is marked SKIPPED because Step 2 does not
-                # execute runtime validation yet.
                 outcome=ValidationOutcome.SKIPPED,
-                details="Step 2 does not execute runtime validation yet.",
+                details="Runtime validation is not executed in Step 3.",
             )
             for action in strategy.actions
         )
-
-
-def _module_for_file(path: str) -> str:
-    parts = path.split("/")
-    if len(parts) >= 3 and parts[0] == "src":
-        return "/".join(parts[:3])
-    if len(parts) >= 2:
-        return "/".join(parts[:2])
-    return path or "unknown"
