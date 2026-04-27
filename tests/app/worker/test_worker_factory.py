@@ -7,7 +7,12 @@ from pathlib import Path
 from src.app.worker.factory import build_worker
 from src.app.worker.github import GitHubCommentPoster
 from src.app.worker.runner import NoopCommentPoster
+from src.runtime.orchestrator import EventOrchestrator
 from src.shared.config import AppConfig
+
+
+def _orchestrator(worker: object) -> object:
+    return worker._orchestrator  # type: ignore[attr-defined]
 
 
 def _comment_poster(worker: object) -> object:
@@ -73,3 +78,4 @@ def test_build_worker_wires_github_poster_for_durable_queue(tmp_path: Path) -> N
     worker = build_worker(cfg)
 
     assert isinstance(_comment_poster(worker), GitHubCommentPoster)
+    assert isinstance(_orchestrator(worker), EventOrchestrator)

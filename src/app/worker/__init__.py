@@ -17,7 +17,7 @@ from ..jobs import (
 )
 from .entrypoint import main
 from .factory import build_worker
-from .github import GitHubCommentPoster, GitHubIssueCommentClient
+from .github import GitHubCommentPoster, GitHubIssueCommentClient, GitHubPRContextClient, GitHubPRContextProvider
 from .runner import CommentPoster, NoopCommentPoster, Orchestrator, Worker
 from .types import WorkerExecution, WorkerExecutionContext, WorkerStatus
 
@@ -27,6 +27,8 @@ __all__ = [
     "EventJob",
     "GitHubCommentPoster",
     "GitHubIssueCommentClient",
+    "GitHubPRContextClient",
+    "GitHubPRContextProvider",
     "InMemoryJobQueue",
     "JobQueue",
     "MalformedEventJob",

@@ -20,9 +20,7 @@ class GitHubPRCommentRenderer:
     """Render QA reports as GitHub PR comment bodies.
 
     The renderer formats already-produced facts. It deliberately does not decide
-    risk, choose validation actions, or call GitHub. Current report content still
-    comes from stub workflow components; later milestones can replace those
-    producers without renaming this channel-specific renderer.
+    risk, choose validation actions, or call GitHub.
     """
 
     def render(self, report: QAReport, *, correlation_id: str) -> PRCommentPayload:
@@ -31,18 +29,23 @@ class GitHubPRCommentRenderer:
 
         body = "\n".join(
             [
-                "## Qaestro QA Report",
+                "## Behaviour Impact Report",
                 "",
                 f"Repository: `{report.repo_full_name}`",
                 f"Pull request: `#{report.pr_number}`",
                 f"Event: `{report.event_id}`",
+                f"Overall risk: **{report.impact.overall_risk.value.upper()}**",
                 "",
+                "### Change Summary",
                 report.summary_markdown or report.impact.summary,
+                "",
+                "### Diff Stats",
+                *_diff_stat_lines(report),
                 "",
                 "### Impact Areas",
                 *_impact_lines(report),
                 "",
-                "### Strategy",
+                "### Recommended Checklist",
                 report.strategy.reasoning or "No strategy reasoning provided.",
                 *_action_lines(report),
                 "",
@@ -62,26 +65,78 @@ class GitHubPRCommentRenderer:
         )
 
 
+def _diff_stat_lines(report: QAReport) -> list[str]:
+    stats = report.impact.raw_diff_stats
+    if not stats:
+        return ["- Diff statistics unavailable."]
+    status_counts = _status_counts(stats)
+    status_line = "- File status counts: unavailable."
+    if status_counts:
+        status_line = "- File status counts: " + ", ".join(f"{status} `{count}`" for status, count in status_counts)
+    return [
+        f"- Files changed: `{stats.get('files_changed', 0)}`",
+        f"- Additions/deletions: `+{stats.get('additions', 0)}/-{stats.get('deletions', 0)}`",
+        status_line,
+    ]
+
+
+def _status_counts(stats: dict[str, int]) -> list[tuple[str, int]]:
+    """Return known status counters first, then any future counters by name."""
+    preferred_order = (
+        "files_added",
+        "files_modified",
+        "files_removed",
+        "files_renamed",
+        "files_copied",
+        "files_unchanged",
+        "files_unknown",
+    )
+    known = [(key, stats[key]) for key in preferred_order if key in stats]
+    extra = sorted(
+        (key, value)
+        for key, value in stats.items()
+        if key.startswith("files_") and key not in {"files_changed", *preferred_order}
+    )
+    return [(_status_label(key), value) for key, value in (*known, *extra)]
+
+
+def _status_label(key: str) -> str:
+    return key.removeprefix("files_").replace("_", " ")
+
+
 def _impact_lines(report: QAReport) -> list[str]:
     if not report.impact.areas:
-        return ["- No impact areas identified in stub mode."]
-    return [f"- **{area.module}** ({area.risk_level.value}): {area.description}" for area in report.impact.areas]
+        return ["- No impact areas identified."]
+    return [
+        (
+            f"- **{area.module}** ({area.risk_level.value}): {area.description}"
+            f" — files: {', '.join(f'`{file}`' for file in area.affected_files[:5])}"
+        )
+        for area in report.impact.areas
+    ]
 
 
 def _action_lines(report: QAReport) -> list[str]:
     if not report.strategy.actions:
-        return ["", "Recommended actions: none in stub mode."]
+        return ["", "Recommended actions: none."]
     lines = ["", "Recommended actions:"]
     lines.extend(
-        f"- {action.description} (`{action.action_type.value}` → `{action.target}`)"
-        for action in report.strategy.actions
+        (
+            f"- P{action.priority} **{action.description}** "
+            f"(`{action.action_type.value}` → `{action.target}`)"
+            f" — {action.rationale}"
+        )
+        for action in sorted(report.strategy.actions, key=lambda item: (-item.priority, item.description))
     )
+    if report.strategy.knowledge_refs:
+        lines.append("")
+        lines.append("Knowledge refs: " + ", ".join(f"`{ref}`" for ref in report.strategy.knowledge_refs))
     return lines
 
 
 def _validation_lines(report: QAReport) -> list[str]:
     if not report.validations:
-        return ["Validation skipped — runtime validation has not produced results yet."]
+        return ["Validation not executed in this step — recommendations only."]
     return [
         f"- Validation: {result.outcome.value} — {result.details or result.action.description}"
         for result in report.validations

@@ -9,13 +9,9 @@ from __future__ import annotations
 from .chat_workflow import ChatWorkflowOrchestrator
 from .ci_workflow import CIWorkflowOrchestrator
 from .dispatcher import EventOrchestrator
+from .pr_context import EventPRContextProvider, PRContextProvider
 from .pr_event_stubs import PRCommentWorkflowOrchestrator, PRReviewWorkflowOrchestrator
-from .pr_workflow import (
-    PRWorkflowOrchestrator,
-    StubPRBehaviourAnalyzer,
-    StubPRRuntimeValidator,
-    StubPRStrategyEngine,
-)
+from .pr_workflow import PRWorkflowOrchestrator, StubPRRuntimeValidator
 from .types import (
     PRBehaviourAnalyzer,
     PRRuntimeValidator,
@@ -31,8 +27,10 @@ __all__ = [
     "CIWorkflowOrchestrator",
     "ChatWorkflowOrchestrator",
     "EventOrchestrator",
+    "EventPRContextProvider",
     "PRBehaviourAnalyzer",
     "PRCommentWorkflowOrchestrator",
+    "PRContextProvider",
     "PRReviewWorkflowOrchestrator",
     "PRRuntimeValidator",
     "PRStrategyEngine",
@@ -41,8 +39,6 @@ __all__ = [
     "PRWorkflowRenderer",
     "PRWorkflowResult",
     "ShouldValidate",
-    "StubPRBehaviourAnalyzer",
     "StubPRRuntimeValidator",
-    "StubPRStrategyEngine",
     "UnsupportedEventError",
 ]
