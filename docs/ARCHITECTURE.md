@@ -96,6 +96,19 @@ Redis backend 실행에 필요한 핵심 환경변수는 `QAESTRO_QUEUE_BACKEND=
 
 worker는 처리 중 ack되지 않은 message를 장애 복구 대상으로 `XAUTOCLAIM`할 수 있다. 기본 `QAESTRO_REDIS_CLAIM_IDLE_MS`는 300000ms(5분)로 둔다. 이 값이 실제 job 처리 시간보다 너무 작으면 정상 처리 중인 long-running job이 다른 worker에게 중복 claim될 수 있으므로, 운영에서는 worker timeout·LLM 호출 시간·GitHub posting 시간을 합친 최대 처리 시간보다 크게 설정해야 한다. retry가 모두 실패하거나 malformed payload를 만난 terminal failure는 stream을 막지 않도록 ack하되, worker가 `correlation_id`, `delivery_id`, `attempts`, `error`를 포함한 error log를 남긴다. DLQ와 metrics는 운영 안정화 단계에서 확장한다.
 
+### Tool autonomy boundary
+
+qaestro는 정해진 workflow를 따르되, 각 단계 안에서는 agent가 필요한 tool을 선택적으로 사용할 수 있게 한다. 이때 tool 사용 범위는 단계별로 제한한다.
+
+| 단계 | 허용되는 tool 성격 |
+|------|-------------------|
+| Context acquisition | PR metadata/diff/files, PR comments/reviews, 관련 chat thread, knowledge read |
+| Analysis / strategy | 수집된 context, knowledge read, 제한된 추가 조회 |
+| Validation | strategy가 선택한 runtime probe/test execution |
+| Output | PR comment, review comment, chat response 같은 write action |
+
+Read tool은 맥락 수집과 판단을 돕기 위해 비교적 넓게 허용할 수 있지만, write tool은 output policy를 거쳐야 한다. destructive action은 기본 금지이며, comment 작성·knowledge write 같은 side effect는 correlation id와 중복 방지 정책을 함께 고려한다.
+
 ### 2. Behaviour Analyzer
 
 "이 PR에서 무엇이 변했는가" — 사실 기반 분석.
