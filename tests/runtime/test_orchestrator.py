@@ -168,7 +168,7 @@ def test_pr_workflow_orchestrator_runs_stub_flow_and_renders_pr_comment_payload(
     assert result.correlation_id == "corr-001"
     assert result.stage_order == ("context", "analyzer", "strategy", "validator", "renderer")
     assert result.impact.summary.startswith("PR #31 (feat: add connector) changes 2 files")
-    assert result.strategy.reasoning.startswith("Medium risk")
+    assert result.strategy.reasoning.startswith("High risk")
     assert len(result.validations) == 3
     assert result.comment_payload.repo_full_name == "Kimcheolhui/qaestro"
     assert result.comment_payload.pr_number == 31

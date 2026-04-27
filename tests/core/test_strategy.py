@@ -7,20 +7,18 @@ from src.core.knowledge import InMemoryKnowledgeBase, KnowledgeEntry, KnowledgeQ
 from src.core.strategy import RuleBasedPRStrategyEngine
 
 
-def test_in_memory_knowledge_base_matches_repo_topics_and_search_terms_deterministically() -> None:
+def test_in_memory_knowledge_base_matches_repo_and_query_text_deterministically() -> None:
     knowledge = InMemoryKnowledgeBase(
         entries=(
             KnowledgeEntry(
                 key="payments-refund-contract",
                 summary="Payment refund API changes require refund contract checks.",
-                topics=("api", "payments"),
                 repos=("acme-corp/web-api",),
                 checklist_items=("Verify POST /refunds contract",),
             ),
             KnowledgeEntry(
                 key="other-repo-ui",
-                summary="Unrelated UI rule.",
-                topics=("ui",),
+                summary="Refund UI rule for a different repository.",
                 repos=("other/repo",),
                 checklist_items=("Check UI manually",),
             ),
@@ -30,8 +28,7 @@ def test_in_memory_knowledge_base_matches_repo_topics_and_search_terms_determini
     matches = knowledge.search(
         KnowledgeQuery(
             repo_full_name="acme-corp/web-api",
-            topics=("api",),
-            search_terms=("refund",),
+            query_text="refund contract",
         )
     )
 
@@ -43,13 +40,13 @@ def test_strategy_generates_deterministic_actions_from_risk_areas_and_knowledge(
         summary="Changed payment API and checkout UI",
         areas=(
             ImpactArea(
-                module="api",
+                module="src/api",
                 description="modified src/api/payments.py",
                 risk_level=RiskLevel.MEDIUM,
                 affected_files=("src/api/payments.py",),
             ),
             ImpactArea(
-                module="ui",
+                module="src/web/checkout",
                 description="modified src/web/checkout/RefundForm.tsx",
                 risk_level=RiskLevel.MEDIUM,
                 affected_files=("src/web/checkout/RefundForm.tsx",),
@@ -63,7 +60,6 @@ def test_strategy_generates_deterministic_actions_from_risk_areas_and_knowledge(
             KnowledgeEntry(
                 key="refund-regression",
                 summary="Refund changes previously broke zero-amount edge cases.",
-                topics=("api", "ui"),
                 repos=("acme-corp/web-api",),
                 checklist_items=("Exercise zero-amount refund edge case",),
             ),
@@ -81,21 +77,21 @@ def test_strategy_generates_deterministic_actions_from_risk_areas_and_knowledge(
     assert result.knowledge_refs == ("refund-regression",)
     assert result.reasoning.startswith("Medium risk")
     assert [(action.action_type, action.target) for action in result.actions] == [
-        (ActionType.VERIFY_API_CONTRACT, "api"),
-        (ActionType.SMOKE_TEST, "ui"),
+        (ActionType.RUN_TESTS, "tests/src/api"),
+        (ActionType.RUN_TESTS, "tests/src/web/checkout"),
         (ActionType.RUN_TESTS, "tests/"),
         (ActionType.CUSTOM, "knowledge:refund-regression"),
     ]
-    assert [action.priority for action in result.actions] == [3, 3, 2, 4]
+    assert [action.priority for action in result.actions] == [2, 2, 2, 4]
     assert "zero-amount" in result.actions[-1].description
 
 
-def test_strategy_generates_generic_actions_for_unknown_source_modules() -> None:
+def test_strategy_generates_generic_actions_for_repo_observed_groups() -> None:
     impact = BehaviourImpact(
         summary="Changed adapter module",
         areas=(
             ImpactArea(
-                module="source",
+                module="src/adapters/connectors/github",
                 description="modified src/adapters/connectors/github/client.py",
                 risk_level=RiskLevel.LOW,
                 affected_files=("src/adapters/connectors/github/client.py",),
@@ -113,5 +109,5 @@ def test_strategy_generates_generic_actions_for_unknown_source_modules() -> None
 
     assert result.actions
     assert result.actions[0].action_type is ActionType.RUN_TESTS
-    assert result.actions[0].target == "tests/source"
+    assert result.actions[0].target == "tests/src/adapters/connectors/github"
     assert result.actions[1].target == "tests/"

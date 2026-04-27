@@ -113,7 +113,7 @@ def test_pr_workflow_uses_context_provider_instead_of_webhook_file_placeholders(
 
     result = PRWorkflowOrchestrator(context_provider=StaticContextProvider()).run(_event())
 
-    assert result.impact.overall_risk is RiskLevel.MEDIUM
-    assert result.impact.areas[0].module == "api"
+    assert result.impact.overall_risk is RiskLevel.LOW
+    assert result.impact.areas[0].module == "src/api"
     assert "placeholder.txt" not in result.report.summary_markdown
     assert "Behaviour Impact Report" in result.comment_payload.body

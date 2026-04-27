@@ -28,8 +28,7 @@ class RuleBasedPRStrategyEngine:
         matches = self._knowledge.search(
             KnowledgeQuery(
                 repo_full_name=repo_full_name,
-                topics=tuple(area.module for area in impact.areas),
-                search_terms=_terms_from_title_and_impact(title, impact),
+                query_text=_query_text_from_title_and_impact(title, impact),
             )
         )
         actions = (*_area_actions(impact), *_baseline_actions(impact), *_knowledge_actions(matches))
@@ -42,85 +41,31 @@ class RuleBasedPRStrategyEngine:
 
 
 def _area_actions(impact: BehaviourImpact) -> tuple[StrategyAction, ...]:
-    """Convert each impact surface into a deterministic validation suggestion."""
-    actions: list[StrategyAction] = []
-    for area in impact.areas:
-        surface = area.module
-        if surface == "api":
-            actions.append(
-                _action(
-                    action_type=ActionType.VERIFY_API_CONTRACT,
-                    description="Verify API contract and backwards-compatible request/response behaviour",
-                    target="api",
-                    area=area,
-                    base_priority=3,
-                )
-            )
-        elif surface == "ui":
-            actions.append(
-                _action(
-                    action_type=ActionType.SMOKE_TEST,
-                    description="Smoke test the affected UI flow in the changed surface",
-                    target="ui",
-                    area=area,
-                    base_priority=3,
-                )
-            )
-        elif surface == "config":
-            actions.append(
-                _action(
-                    action_type=ActionType.SMOKE_TEST,
-                    description="Verify configuration loads in the target environment",
-                    target="config",
-                    area=area,
-                    base_priority=3,
-                )
-            )
-        elif surface == "infra":
-            actions.append(
-                _action(
-                    action_type=ActionType.CUSTOM,
-                    description="Review deployment or infrastructure plan before rollout",
-                    target="infra",
-                    area=area,
-                    base_priority=3,
-                )
-            )
-        else:
-            actions.append(
-                _action(
-                    action_type=ActionType.RUN_TESTS,
-                    description="Run focused tests or review checks for the affected impact surface",
-                    target=f"tests/{area.module}",
-                    area=area,
-                    base_priority=1,
-                )
-            )
-    return tuple(actions)
+    """Create one focused check suggestion per observed path group."""
+    return tuple(
+        _action(
+            action_type=ActionType.RUN_TESTS,
+            description="Run focused tests or review checks for the observed path group",
+            target=f"tests/{area.module}",
+            area=area,
+            base_priority=2 if area.risk_level is RiskLevel.MEDIUM else 1,
+        )
+        for area in impact.areas
+        if area.module not in {"README.md"}
+    )
 
 
 def _baseline_actions(impact: BehaviourImpact) -> tuple[StrategyAction, ...]:
-    modules = {area.module for area in impact.areas}
     actions: list[StrategyAction] = []
-    executable_modules = {area.module for area in impact.areas if area.module not in {"docs", "tests"}}
-    if executable_modules:
+    executable_groups = {area.module for area in impact.areas if not _is_low_signal_doc_group(area.module)}
+    if executable_groups:
         actions.append(
             StrategyAction(
                 action_type=ActionType.RUN_TESTS,
                 description="Run focused regression tests for changed behaviour",
                 target="tests/",
                 priority=2 if impact.overall_risk is RiskLevel.MEDIUM else 3 if _is_high(impact.overall_risk) else 1,
-                rationale="Executable source or behaviour-facing files changed.",
-            )
-        )
-    if modules & {"config", "infra"}:
-        actions.append(
-            StrategyAction(
-                action_type=ActionType.RUN_LINTER,
-                description="Run lint/static validation for configuration and deployment files",
-                target=".",
-                priority=2 if _is_high(impact.overall_risk) else 1,
-                rationale="Configuration or infrastructure files changed.",
+                rationale="Non-document path groups changed.",
             )
         )
     return tuple(actions)
@@ -157,15 +102,15 @@ def _action(
         description=description,
         target=target,
         priority=priority,
-        rationale=f"{area.module} impact surface is {area.risk_level.value} risk; affected files: {files}",
+        rationale=f"{area.module} path group is {area.risk_level.value} risk; affected files: {files}",
     )
 
 
 def _reasoning(impact: BehaviourImpact, matches: tuple[KnowledgeEntry, ...]) -> str:
     risk_label = impact.overall_risk.value.capitalize()
-    modules = ", ".join(area.module for area in impact.areas) or "none"
+    path_groups = ", ".join(area.module for area in impact.areas) or "none"
     knowledge_text = f" Knowledge matches: {', '.join(entry.key for entry in matches)}." if matches else ""
-    return f"{risk_label} risk based on affected impact surfaces: {modules}.{knowledge_text}"
+    return f"{risk_label} risk based on observed path groups: {path_groups}.{knowledge_text}"
 
 
 def _confidence(risk: RiskLevel, matches: tuple[KnowledgeEntry, ...]) -> float:
@@ -180,16 +125,15 @@ def _confidence(risk: RiskLevel, matches: tuple[KnowledgeEntry, ...]) -> float:
     return min(base, 0.9)
 
 
-def _terms_from_title_and_impact(title: str, impact: BehaviourImpact) -> tuple[str, ...]:
-    words = [word.strip(".,:;()[]{}#").lower() for word in title.split()]
-    modules = [area.module.lower() for area in impact.areas]
-    file_terms = [
-        part.lower()
-        for area in impact.areas
-        for file in area.affected_files
-        for part in file.replace(".", "/").split("/")
-    ]
-    return tuple(dict.fromkeys(word for word in (*words, *modules, *file_terms) if len(word) >= 3))
+def _query_text_from_title_and_impact(title: str, impact: BehaviourImpact) -> str:
+    """Build the Step 3 free-text knowledge query from available PR facts."""
+    files = " ".join(file for area in impact.areas for file in area.affected_files)
+    path_groups = " ".join(area.module for area in impact.areas)
+    return " ".join((title, impact.summary, path_groups, files))
+
+
+def _is_low_signal_doc_group(path_group: str) -> bool:
+    return path_group.lower() in {"readme.md", "docs", "changelog.md"}
 
 
 def _is_high(risk: RiskLevel) -> bool:

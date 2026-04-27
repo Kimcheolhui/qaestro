@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Iterable
+from pathlib import PurePosixPath
 
 from src.core.contracts import BehaviourImpact, ImpactArea, RiskLevel
 
@@ -13,8 +14,9 @@ from .types import PRAnalysisContext, PRFileDiff, PRFileStatus
 class RuleBasedPRBehaviourAnalyzer:
     """Deterministic first-pass PR analyzer for the Step 3 vertical slice.
 
-    These heuristics produce transparent review context, not customer-specific
-    QA knowledge. Long-term risk learning belongs in knowledge/agent workflows.
+    The analyzer reports observed path groups and simple diff signals. It does
+    not try to define customer modules; adaptive ownership/risk learning belongs
+    in later knowledge/agent workflows.
     """
 
     def analyze(self, context: PRAnalysisContext) -> BehaviourImpact:
@@ -30,87 +32,54 @@ class RuleBasedPRBehaviourAnalyzer:
 
 
 def _build_impact_areas(files: tuple[PRFileDiff, ...]) -> list[ImpactArea]:
-    """Group files into coarse, portable impact surfaces."""
+    """Group files by observed repository path prefixes."""
     grouped: dict[str, list[PRFileDiff]] = defaultdict(list)
     for file in files:
-        grouped[_surface_for_file(file.path)].append(file)
+        grouped[_path_group_for_file(file.path)].append(file)
 
     areas: list[ImpactArea] = []
-    for surface in _sorted_surfaces(grouped):
-        surface_files = tuple(grouped[surface])
-        risk = _risk_for_surface_files(surface, surface_files)
+    for path_group in sorted(grouped):
+        group_files = tuple(grouped[path_group])
+        risk = _risk_for_path_group_files(group_files)
         areas.append(
             ImpactArea(
-                module=surface,
-                description=_area_description(surface, surface_files),
+                module=path_group,
+                description=_area_description(path_group, group_files),
                 risk_level=risk,
-                affected_files=tuple(file.path for file in surface_files),
+                affected_files=tuple(file.path for file in group_files),
             )
         )
     return areas
 
 
-def _sorted_surfaces(grouped: dict[str, list[PRFileDiff]]) -> list[str]:
-    """Keep report ordering stable without implying org-specific ownership."""
-    order = {"api": 0, "ui": 1, "config": 2, "infra": 3, "source": 4, "tests": 90, "docs": 91}
-    return sorted(grouped, key=lambda surface: (order.get(surface, 50), surface))
+def _path_group_for_file(path: str) -> str:
+    """Return a stable path prefix without imposing a product module taxonomy."""
+    clean_path = path.strip("/")
+    if not clean_path:
+        return "unknown"
 
-
-def _surface_for_file(path: str) -> str:
-    """Classify a path into a generic impact surface.
-
-    The returned value is stored in ``ImpactArea.module`` for the existing domain
-    contract, but it is intentionally not a company/team module name.
-    """
-    lowered = path.lower()
-    parts = lowered.split("/")
-    filename = parts[-1] if parts else lowered
-
-    if lowered.startswith(("docs/", "readme", "changelog")) or filename.endswith((".md", ".rst")):
-        return "docs"
-    if lowered.startswith(("tests/", "test/")) or "/tests/" in lowered or filename.startswith("test_"):
-        return "tests"
-    if lowered.startswith((".github/workflows/", "infra/", "terraform/", "k8s/", "deploy/", "deployment/")):
-        return "infra"
-    if lowered.startswith(("config/", "configs/")) or filename.endswith((".toml", ".yaml", ".yml", ".ini", ".env")):
-        return "config"
-    if "/api/" in lowered or lowered.startswith(("api/", "src/api/")) or "router" in lowered or "endpoint" in lowered:
-        return "api"
-    if lowered.startswith(("src/web/", "web/", "frontend/", "ui/")) or filename.endswith(
-        (".tsx", ".jsx", ".vue", ".svelte", ".css", ".scss")
-    ):
-        return "ui"
-    if lowered.startswith("src/"):
-        return "source"
-    return _fallback_surface(path)
-
-
-def _fallback_surface(path: str) -> str:
-    """Fallback for repo roots outside common source/test/doc layouts."""
-    parts = path.split("/")
-    if len(parts) >= 1 and parts[0]:
+    posix_path = PurePosixPath(clean_path)
+    parts = posix_path.parts
+    if len(parts) == 1:
         return parts[0]
-    return "unknown"
+    if parts[0] in {"src", "tests"}:
+        return "/".join(parts[:-1]) if len(parts) > 2 else parts[0]
+    if parts[0] == ".github" and len(parts) >= 2:
+        return "/".join(parts[:2])
+    if len(parts) > 2:
+        return "/".join(parts[:-1])
+    return parts[0]
 
 
-def _risk_for_surface_files(surface: str, files: tuple[PRFileDiff, ...]) -> RiskLevel:
-    """Estimate initial risk from change size, deletion, and risky diff signals.
-
-    This is a transparent default for Step 3, not a learned product risk model.
-    Future agent/knowledge flows should replace these static thresholds when
-    customer-specific risk history is available.
-    """
+def _risk_for_path_group_files(files: tuple[PRFileDiff, ...]) -> RiskLevel:
+    """Estimate initial risk from file status, size, and diff content only."""
     changed_lines = sum(file.additions + file.deletions for file in files)
     removed_files = any(file.status is PRFileStatus.REMOVED for file in files)
     risky_patch = any(_patch_contains_risky_signal(file.patch or "") for file in files)
 
-    if surface in {"infra", "config"} and (changed_lines >= 40 or removed_files):
+    if removed_files or changed_lines >= 120 or risky_patch:
         return RiskLevel.HIGH
-    if surface == "api" and (removed_files or changed_lines >= 180):
-        return RiskLevel.HIGH
-    if risky_patch and surface in {"api", "infra", "config"}:
-        return RiskLevel.HIGH
-    if surface in {"api", "ui", "source", "infra", "config"}:
+    if changed_lines >= 40:
         return RiskLevel.MEDIUM
     return RiskLevel.LOW
 
@@ -152,20 +121,20 @@ def _summary(
     stats: dict[str, int],
 ) -> str:
     """Build a compact top-level summary for humans and later strategy input."""
-    surfaces = ", ".join(area.module for area in areas) or "no classified areas"
+    path_groups = ", ".join(area.module for area in areas) or "no path groups"
     lead_files = ", ".join(file.path for file in context.files[:3]) or "no files"
     return (
         f"PR #{context.pr_number} ({context.title}) changes {stats['files_changed']} files "
-        f"(+{stats['additions']}/-{stats['deletions']}) across {surfaces}. "
+        f"(+{stats['additions']}/-{stats['deletions']}) across {path_groups}. "
         f"Overall risk is {overall_risk.value}. Lead files: {lead_files}."
     )
 
 
-def _area_description(surface: str, files: tuple[PRFileDiff, ...]) -> str:
-    """Describe one impact surface without adding validation judgment."""
+def _area_description(path_group: str, files: tuple[PRFileDiff, ...]) -> str:
+    """Describe one observed path group without adding validation judgment."""
     statuses = ", ".join(sorted({file.status.value for file in files}))
     changed_lines = sum(file.additions + file.deletions for file in files)
-    return f"{statuses} {len(files)} {surface} file(s), {changed_lines} changed line(s)"
+    return f"{statuses} {len(files)} file(s) under {path_group}, {changed_lines} changed line(s)"
 
 
 def _max_risk(risks: Iterable[RiskLevel], *, default: RiskLevel) -> RiskLevel:

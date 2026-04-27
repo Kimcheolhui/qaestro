@@ -20,7 +20,7 @@ def test_pr_file_diff_normalizes_status_and_documents_path_semantics() -> None:
     assert file.status is PRFileStatus.RENAMED
 
 
-def test_analyzer_classifies_impact_surfaces_and_aggregates_medium_risk() -> None:
+def test_analyzer_groups_files_by_observed_path_groups_and_aggregates_risk() -> None:
     context = PRAnalysisContext(
         repo_full_name="acme-corp/web-api",
         pr_number=123,
@@ -69,13 +69,13 @@ def test_analyzer_classifies_impact_surfaces_and_aggregates_medium_risk() -> Non
     assert "src/api/payments.py" in impact.summary
     assert "3 files" in impact.summary
     assert [(area.module, area.risk_level) for area in impact.areas] == [
-        ("api", RiskLevel.MEDIUM),
-        ("tests", RiskLevel.LOW),
-        ("docs", RiskLevel.LOW),
+        ("README.md", RiskLevel.LOW),
+        ("src/api", RiskLevel.MEDIUM),
+        ("tests/api", RiskLevel.LOW),
     ]
 
 
-def test_analyzer_groups_product_specific_source_paths_under_generic_source_surface() -> None:
+def test_analyzer_uses_actual_repo_path_groups_instead_of_fixed_module_labels() -> None:
     context = PRAnalysisContext(
         repo_full_name="Kimcheolhui/qaestro",
         pr_number=125,
@@ -103,17 +103,19 @@ def test_analyzer_groups_product_specific_source_paths_under_generic_source_surf
 
     assert [(area.module, area.risk_level, area.affected_files) for area in impact.areas] == [
         (
-            "source",
+            "src/adapters/connectors/github",
             RiskLevel.MEDIUM,
-            (
-                "src/adapters/connectors/github/client.py",
-                "src/runtime/orchestrator/pr_workflow.py",
-            ),
-        )
+            ("src/adapters/connectors/github/client.py",),
+        ),
+        (
+            "src/runtime/orchestrator",
+            RiskLevel.LOW,
+            ("src/runtime/orchestrator/pr_workflow.py",),
+        ),
     ]
 
 
-def test_analyzer_escalates_high_risk_for_large_infra_and_config_changes() -> None:
+def test_analyzer_escalates_high_risk_from_diff_signals_and_change_size_not_module_names() -> None:
     context = PRAnalysisContext(
         repo_full_name="acme-corp/web-api",
         pr_number=124,
@@ -150,6 +152,7 @@ def test_analyzer_escalates_high_risk_for_large_infra_and_config_changes() -> No
     impact = RuleBasedPRBehaviourAnalyzer().analyze(context)
 
     assert impact.overall_risk is RiskLevel.HIGH
-    assert {area.module for area in impact.areas} == {"infra", "config"}
-    assert all(area.risk_level is RiskLevel.HIGH for area in impact.areas)
-    assert "infra" in impact.summary
+    risks_by_group = {area.module: area.risk_level for area in impact.areas}
+    assert risks_by_group[".github/workflows"] is RiskLevel.HIGH
+    assert risks_by_group["infra/terraform"] is RiskLevel.HIGH
+    assert risks_by_group["config"] is RiskLevel.MEDIUM
