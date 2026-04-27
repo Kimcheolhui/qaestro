@@ -9,6 +9,7 @@ from typing import Protocol
 from src.adapters.renderers import PRCommentPayload
 from src.core.analyzer import PRAnalysisContext
 from src.core.contracts import BehaviourImpact, PREvent, QAReport, StrategyResult, ValidationResult
+from src.runtime.stages import WorkflowStage
 
 
 class UnsupportedEventError(RuntimeError):
@@ -26,7 +27,7 @@ class PRWorkflowDraft:
 
     event: PREvent
     report: QAReport
-    stage_order: tuple[str, ...]
+    stage_order: tuple[WorkflowStage, ...]
 
     @property
     def correlation_id(self) -> str:
@@ -52,7 +53,7 @@ class PRWorkflowResult:
     event: PREvent
     report: QAReport
     comment_payload: PRCommentPayload
-    stage_order: tuple[str, ...]
+    stage_order: tuple[WorkflowStage, ...]
 
     @property
     def correlation_id(self) -> str:

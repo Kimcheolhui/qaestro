@@ -25,21 +25,21 @@ class Orchestrator(Protocol):
     def run(self, event: Event) -> PRWorkflowResult: ...
 
 
-class CommentPoster(Protocol):
-    """Posts rendered PR comment payloads to an external system."""
+class OutputPoster(Protocol):
+    """Posts rendered PR workflow output to an external system."""
 
-    def post_comment(self, payload: PRCommentPayload) -> None: ...
+    def post_comment(self, payload: PRCommentPayload, *, correlation_id: str) -> object: ...
 
 
-class NoopCommentPoster:
-    """Default poster used before a real GitHub client is wired.
+class NoopOutputPoster:
+    """Default output tool adapter used for side-effect-free local runs.
 
-    This is a placeholder only: it makes the worker pipeline executable in Step 2
-    without external side effects. Production wiring should inject
-    ``GitHubCommentPoster`` from ``src.app.worker.github``.
+    This placeholder intentionally performs no external write. Durable worker
+    modes must inject a ToolRuntime-backed poster so output writes pass through
+    stage policy and audit.
     """
 
-    def post_comment(self, payload: PRCommentPayload) -> None:
+    def post_comment(self, payload: PRCommentPayload, *, correlation_id: str) -> object:
         return None
 
 
@@ -50,7 +50,7 @@ class Worker:
         self,
         *,
         orchestrator: Orchestrator | None = None,
-        comment_poster: CommentPoster | None = None,
+        output_poster: OutputPoster | None = None,
         max_attempts: int = 3,
         timeout_seconds: float | None = None,
         agent_runner: object | None = None,
@@ -58,7 +58,7 @@ class Worker:
         if max_attempts < 1:
             raise ValueError("max_attempts must be >= 1")
         self._orchestrator = orchestrator or EventOrchestrator()
-        self._comment_poster = comment_poster or NoopCommentPoster()
+        self._output_poster = output_poster or NoopOutputPoster()
         self._max_attempts = max_attempts
         self._timeout_seconds = timeout_seconds
         self._agent_runner = agent_runner
@@ -164,7 +164,7 @@ class Worker:
                 lambda: self._orchestrator.run(job.event),
                 timeout_seconds=context.timeout_seconds,
             )
-            self._comment_poster.post_comment(result.comment_payload)
+            self._output_poster.post_comment(result.comment_payload, correlation_id=job.correlation_id)
             return result
         return self._run_pipeline(job, context)
 
@@ -174,7 +174,7 @@ class Worker:
         # later milestones.
         _ = context.agent_runner
         result = self._orchestrator.run(job.event)
-        self._comment_poster.post_comment(result.comment_payload)
+        self._output_poster.post_comment(result.comment_payload, correlation_id=job.correlation_id)
         return result
 
 

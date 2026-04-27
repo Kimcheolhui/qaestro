@@ -12,6 +12,8 @@ from .dispatcher import EventOrchestrator
 from .pr_context import EventPRContextProvider, PRContextProvider
 from .pr_event_stubs import PRCommentWorkflowOrchestrator, PRReviewWorkflowOrchestrator
 from .pr_workflow import PRWorkflowOrchestrator, StubPRRuntimeValidator
+from .tool_context import ToolRuntimePRContextProvider
+from .tool_output import ToolRuntimePRCommentPoster
 from .types import (
     PRBehaviourAnalyzer,
     PRRuntimeValidator,
@@ -40,5 +42,7 @@ __all__ = [
     "PRWorkflowResult",
     "ShouldValidate",
     "StubPRRuntimeValidator",
+    "ToolRuntimePRCommentPoster",
+    "ToolRuntimePRContextProvider",
     "UnsupportedEventError",
 ]

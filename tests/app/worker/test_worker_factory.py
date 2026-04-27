@@ -5,9 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from src.app.worker.factory import build_worker
-from src.app.worker.github import GitHubCommentPoster
-from src.app.worker.runner import NoopCommentPoster
-from src.runtime.orchestrator import EventOrchestrator
+from src.app.worker.runner import NoopOutputPoster
+from src.runtime.orchestrator import EventOrchestrator, ToolRuntimePRCommentPoster, ToolRuntimePRContextProvider
 from src.shared.config import AppConfig
 
 
@@ -15,14 +14,14 @@ def _orchestrator(worker: object) -> object:
     return worker._orchestrator  # type: ignore[attr-defined]
 
 
-def _comment_poster(worker: object) -> object:
-    return worker._comment_poster  # type: ignore[attr-defined]
+def _output_poster(worker: object) -> object:
+    return worker._output_poster  # type: ignore[attr-defined]
 
 
-def test_build_worker_uses_noop_poster_for_memory_queue() -> None:
+def test_build_worker_uses_noop_output_poster_for_memory_queue() -> None:
     worker = build_worker(AppConfig(queue_backend="memory"))
 
-    assert isinstance(_comment_poster(worker), NoopCommentPoster)
+    assert isinstance(_output_poster(worker), NoopOutputPoster)
 
 
 def test_build_worker_rejects_durable_queue_without_github_app_id() -> None:
@@ -65,7 +64,7 @@ def test_build_worker_rejects_durable_queue_without_private_key_path() -> None:
         assert "QAESTRO_GITHUB_APP_PRIVATE_KEY_PATH" in str(exc)
 
 
-def test_build_worker_wires_github_poster_for_durable_queue(tmp_path: Path) -> None:
+def test_build_worker_wires_github_tool_runtime_for_durable_queue(tmp_path: Path) -> None:
     key_path = tmp_path / "app.pem"
     key_path.write_text("private-key", encoding="utf-8")
     cfg = AppConfig(
@@ -77,5 +76,8 @@ def test_build_worker_wires_github_poster_for_durable_queue(tmp_path: Path) -> N
 
     worker = build_worker(cfg)
 
-    assert isinstance(_comment_poster(worker), GitHubCommentPoster)
-    assert isinstance(_orchestrator(worker), EventOrchestrator)
+    orchestrator = _orchestrator(worker)
+    assert isinstance(orchestrator, EventOrchestrator)
+    pr_orchestrator = orchestrator._pr_orchestrator
+    assert isinstance(pr_orchestrator._context_provider, ToolRuntimePRContextProvider)
+    assert isinstance(_output_poster(worker), ToolRuntimePRCommentPoster)

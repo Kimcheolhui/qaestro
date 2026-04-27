@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from src.adapters.connectors.github import FileDiff, PRMeta
-from src.app.worker import GitHubPRContextProvider
 from src.core.analyzer import PRAnalysisContext
 from src.core.contracts import EventMeta, EventSource, EventType, FileChange, PREvent, PROpened, RiskLevel
 from src.runtime.orchestrator import PRWorkflowOrchestrator
@@ -66,26 +65,6 @@ def _event() -> PROpened:
         diff_url="https://github.com/acme-corp/web-api/pull/123.diff",
         files_changed=(FileChange(path="placeholder.txt", status="modified"),),
     )
-
-
-def test_github_context_provider_fetches_pr_metadata_files_and_diff() -> None:
-    client = RecordingGitHubClient()
-    provider = GitHubPRContextProvider(client)
-
-    context = provider.load(_event())
-
-    assert isinstance(context, PRAnalysisContext)
-    assert context.repo_full_name == "acme-corp/web-api"
-    assert context.title == "feat: fetched title"
-    assert context.head_branch == "feat/fetched"
-    assert context.files[0].path == "src/api/refunds.py"
-    assert context.files[0].patch is not None
-    assert context.unified_diff.startswith("diff --git")
-    assert client.calls == [
-        ("pr", "acme-corp", 123),
-        ("files", "acme-corp", 123),
-        ("diff", "acme-corp", 123),
-    ]
 
 
 def test_pr_workflow_uses_context_provider_instead_of_webhook_file_placeholders() -> None:

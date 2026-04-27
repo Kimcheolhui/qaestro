@@ -1,0 +1,98 @@
+"""ToolRuntime-backed PR context collection."""
+
+from __future__ import annotations
+
+from typing import overload
+
+from src.adapters.connectors.github import FileDiff, PRMeta
+from src.core.analyzer import PRAnalysisContext, PRFileDiff, PRFileStatus
+from src.core.contracts import PREvent
+from src.runtime.stages import WorkflowStage
+from src.runtime.tools import ToolCall, ToolResult, ToolRuntime
+
+
+class ToolRuntimePRContextProvider:
+    """Collect PR metadata/files/diff through stage-approved GitHub read tools."""
+
+    def __init__(self, runtime: ToolRuntime) -> None:
+        self._runtime = runtime
+
+    def load(self, event: PREvent) -> PRAnalysisContext:
+        common_input = {"repo_full_name": event.repo_full_name, "pr_number": event.pr_number}
+        meta = _expect_output(
+            self._runtime.execute(
+                ToolCall(
+                    stage=WorkflowStage.CONTEXT,
+                    name="github.pr.view",
+                    input=common_input,
+                    correlation_id=event.meta.correlation_id,
+                )
+            ),
+            PRMeta,
+        )
+        files = _expect_file_tuple(
+            self._runtime.execute(
+                ToolCall(
+                    stage=WorkflowStage.CONTEXT,
+                    name="github.pr.files",
+                    input=common_input,
+                    correlation_id=event.meta.correlation_id,
+                )
+            ).output
+        )
+        unified_diff = _expect_output(
+            self._runtime.execute(
+                ToolCall(
+                    stage=WorkflowStage.CONTEXT,
+                    name="github.pr.diff",
+                    input=common_input,
+                    correlation_id=event.meta.correlation_id,
+                )
+            ),
+            str,
+        )
+        return PRAnalysisContext(
+            repo_full_name=event.repo_full_name,
+            pr_number=event.pr_number,
+            title=meta.title or event.title,
+            body=event.body,
+            base_branch=meta.base_ref or event.base_branch,
+            head_branch=meta.head_ref or event.head_branch,
+            files=tuple(_normalize_file(file) for file in files),
+            unified_diff=unified_diff,
+        )
+
+
+@overload
+def _expect_output(result: object, expected_type: type[PRMeta]) -> PRMeta: ...
+
+
+@overload
+def _expect_output(result: object, expected_type: type[str]) -> str: ...
+
+
+def _expect_output(result: object, expected_type: type[object]) -> object:
+    if not isinstance(result, ToolResult):
+        raise TypeError("runtime returned a non-ToolResult object")
+    if not result.ok:
+        raise RuntimeError(result.error or f"tool {result.call.name!r} failed")
+    if not isinstance(result.output, expected_type):
+        raise TypeError(f"tool {result.call.name!r} returned unexpected output type")
+    return result.output
+
+
+def _expect_file_tuple(output: object) -> tuple[FileDiff, ...]:
+    if not isinstance(output, tuple) or not all(isinstance(item, FileDiff) for item in output):
+        raise TypeError("github.pr.files returned unexpected output type")
+    return output
+
+
+def _normalize_file(file: FileDiff) -> PRFileDiff:
+    return PRFileDiff(
+        path=file.filename,
+        status=PRFileStatus.normalize(file.status),
+        additions=file.additions,
+        deletions=file.deletions,
+        patch=file.patch,
+        previous_filename=file.previous_filename,
+    )

@@ -6,6 +6,8 @@ Scope (Step 2):
 - ``GET  /repos/{owner}/{repo}/pulls/{number}/files``          — :meth:`list_pull_request_files`
 - ``GET  /repos/{owner}/{repo}/pulls/{number}`` (diff accept)  — :meth:`get_pull_request_diff`
 - ``POST /repos/{owner}/{repo}/issues/{number}/comments``      — :meth:`create_issue_comment`
+- ``GET  /repos/{owner}/{repo}/issues/{number}/comments``      — :meth:`list_issue_comments`
+- ``PATCH /repos/{owner}/{repo}/issues/comments/{comment_id}`` — :meth:`update_issue_comment`
 
 Out of scope: retries (worker handles), persistent token cache (in-memory only),
 streaming, GraphQL.
@@ -137,10 +139,53 @@ class GitHubClient:
         data = resp.json()
         if not isinstance(data, dict):
             raise GitHubError("unexpected create-comment payload shape")
-        return CommentResult(
-            id=int(data.get("id", 0)),
-            html_url=str(data.get("html_url", "")),
+        return _comment_result_from_payload(data)
+
+    def list_issue_comments(
+        self,
+        owner: str,
+        repo: str,
+        number: int,
+        *,
+        per_page: int = _DEFAULT_PER_PAGE,
+    ) -> list[CommentResult]:
+        """List issue/PR conversation comments, walking pagination eagerly."""
+        if not 1 <= per_page <= 100:
+            raise ValueError("per_page must be between 1 and 100")
+
+        results: list[CommentResult] = []
+        for page in range(1, _MAX_PAGES + 1):
+            query = urlencode({"per_page": per_page, "page": page})
+            path = f"/repos/{_segment(owner)}/{_segment(repo)}/issues/{number}/comments?{query}"
+            resp = self._request("GET", path)
+            page_data = resp.json()
+            if not isinstance(page_data, list):
+                raise GitHubError("unexpected issue-comments payload shape")
+            for item in page_data:
+                if not isinstance(item, dict):
+                    raise GitHubError("unexpected issue-comments payload shape")
+                results.append(_comment_result_from_payload(item))
+            if len(page_data) < per_page:
+                break
+        return results
+
+    def update_issue_comment(self, owner: str, repo: str, comment_id: int, body: str) -> CommentResult:
+        """Update an existing issue/PR conversation comment."""
+        if not body.strip():
+            raise ValueError("comment body must not be empty")
+
+        path = f"/repos/{_segment(owner)}/{_segment(repo)}/issues/comments/{comment_id}"
+        payload = json.dumps({"body": body}).encode("utf-8")
+        resp = self._request(
+            "PATCH",
+            path,
+            body=payload,
+            extra_headers={"Content-Type": "application/json"},
         )
+        data = resp.json()
+        if not isinstance(data, dict):
+            raise GitHubError("unexpected update-comment payload shape")
+        return _comment_result_from_payload(data)
 
     # ── Internal ──────────────────────────────────────────────────────
 
@@ -229,6 +274,14 @@ def _pr_meta_from_payload(data: dict[str, Any]) -> PRMeta:
         author=str(user.get("login", "")),
         draft=bool(data.get("draft", False)),
         html_url=str(data.get("html_url", "")),
+    )
+
+
+def _comment_result_from_payload(data: dict[str, Any]) -> CommentResult:
+    return CommentResult(
+        id=int(data.get("id", 0)),
+        html_url=str(data.get("html_url", "")),
+        body=str(data.get("body", "")),
     )
 
 
