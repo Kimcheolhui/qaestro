@@ -70,16 +70,34 @@ def _create_or_update_comment(client: GitHubPRToolClient, call: ToolCall) -> Com
     owner, repo, pr_number = _repo_pr_input(call)
     body = str(call.input.get("body", ""))
     marker = str(call.input.get("marker", "")).strip()
+    persisted_body = _persisted_comment_body(body, marker)
     for comment in client.list_issue_comments(owner, repo, pr_number):
         if marker and marker in comment.body:
-            return client.update_issue_comment(owner, repo, comment.id, body)
-    return client.create_issue_comment(owner, repo, pr_number, body)
+            return client.update_issue_comment(owner, repo, comment.id, persisted_body)
+    return client.create_issue_comment(owner, repo, pr_number, persisted_body)
+
+
+def _persisted_comment_body(body: str, marker: str) -> str:
+    if not marker or marker in body:
+        return body
+    if not body:
+        return marker
+    return f"{marker}\n\n{body}"
 
 
 def _repo_pr_input(call: ToolCall) -> tuple[str, str, int]:
     repo_full_name = str(call.input.get("repo_full_name", ""))
     owner, repo = _split_repo(repo_full_name)
-    return owner, repo, int(call.input.get("pr_number", 0))
+    raw_pr_number = call.input.get("pr_number")
+    if raw_pr_number is None or raw_pr_number == "":
+        raise ValueError("pr_number is required and must be a positive integer")
+    try:
+        pr_number = int(raw_pr_number)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("pr_number must be a positive integer") from exc
+    if pr_number <= 0:
+        raise ValueError("pr_number must be greater than 0")
+    return owner, repo, pr_number
 
 
 def _split_repo(repo_full_name: str) -> tuple[str, str]:

@@ -283,6 +283,20 @@ def test_list_issue_comments_handles_pagination(client, transport):
     assert comments[-1].body == "qaestro-marker"
 
 
+def test_list_issue_comments_rejects_unexpected_item_shape(client, transport):
+    transport.route(
+        "GET",
+        f"https://api.github.com/repos/{OWNER}/{REPO}/issues/{PR_NUM}/comments?per_page=100&page=1",
+        FakeResponse(
+            status=200,
+            body=json.dumps([{"id": 1, "html_url": "https://github.com/x/comments/1"}, "bad"]).encode(),
+        ),
+    )
+
+    with pytest.raises(GitHubError, match="issue-comments payload shape"):
+        client.list_issue_comments(OWNER, REPO, PR_NUM)
+
+
 def test_update_issue_comment_patches_body(client, transport):
     transport.route(
         "PATCH",

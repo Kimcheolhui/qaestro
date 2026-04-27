@@ -154,6 +154,31 @@ def test_github_pr_comment_tool_posts_rendered_body() -> None:
     ]
 
 
+def test_github_pr_comment_tool_persists_marker_when_creating_comment() -> None:
+    client = RecordingGitHubClient()
+    runtime = _runtime(client)
+
+    result = runtime.execute(
+        ToolCall(
+            stage=WorkflowStage.OUTPUT,
+            name="github.pr.comment.create_or_update",
+            input={
+                "repo_full_name": "octocat/hello-world",
+                "pr_number": 42,
+                "body": "Behaviour Impact Report",
+                "marker": "qaestro-marker",
+            },
+            correlation_id="corr-output",
+        )
+    )
+
+    assert result.ok is True
+    assert client.calls == [
+        ("comments", "octocat", "hello-world", 42),
+        ("comment", "octocat", "hello-world", 42, "qaestro-marker\n\nBehaviour Impact Report"),
+    ]
+
+
 def test_github_pr_comment_tool_updates_existing_qaestro_comment_when_marker_matches() -> None:
     class ExistingCommentClient(RecordingGitHubClient):
         def list_issue_comments(self, owner: str, repo: str, number: int) -> list[CommentResult]:
@@ -188,8 +213,31 @@ def test_github_pr_comment_tool_updates_existing_qaestro_comment_when_marker_mat
     assert result.output.id == 999
     assert client.calls == [
         ("comments", "octocat", "hello-world", 42),
-        ("update_comment", "octocat", "hello-world", 999, "new Behaviour Impact Report"),
+        ("update_comment", "octocat", "hello-world", 999, "qaestro-marker\n\nnew Behaviour Impact Report"),
     ]
+
+
+def test_github_pr_tool_rejects_invalid_pr_number() -> None:
+    client = RecordingGitHubClient()
+    runtime = _runtime(client)
+
+    for raw_pr_number in (None, "", 0, -1, "not-an-int"):
+        input_payload: dict[str, object] = {"repo_full_name": "octocat/hello-world"}
+        if raw_pr_number is not None:
+            input_payload["pr_number"] = raw_pr_number
+        result = runtime.execute(
+            ToolCall(
+                stage=WorkflowStage.CONTEXT,
+                name="github.pr.view",
+                input=input_payload,
+                correlation_id="corr-gh",
+            )
+        )
+
+        assert result.ok is False
+        assert "pr_number" in result.error
+
+    assert client.calls == []
 
 
 def test_legacy_github_specific_adapters_are_not_exported_from_worker_api() -> None:

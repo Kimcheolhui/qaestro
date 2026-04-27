@@ -20,11 +20,11 @@ from .runner import Worker
 
 
 def build_worker(cfg: AppConfig) -> Worker:
-    """Build a worker with the appropriate comment poster for the queue mode.
+    """Build a worker with the appropriate output poster for the queue mode.
 
     In-memory mode remains side-effect free for local smoke runs. Durable queue
     modes must be wired to GitHub before jobs are acknowledged; otherwise a
-    worker could silently consume Redis jobs without publishing review comments.
+    worker could silently consume Redis jobs without publishing review output.
     """
     if cfg.queue_backend == "memory":
         return Worker()

@@ -161,7 +161,10 @@ class GitHubClient:
             page_data = resp.json()
             if not isinstance(page_data, list):
                 raise GitHubError("unexpected issue-comments payload shape")
-            results.extend(_comment_result_from_payload(item) for item in page_data if isinstance(item, dict))
+            for item in page_data:
+                if not isinstance(item, dict):
+                    raise GitHubError("unexpected issue-comments payload shape")
+                results.append(_comment_result_from_payload(item))
             if len(page_data) < per_page:
                 break
         return results
