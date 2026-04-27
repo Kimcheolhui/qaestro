@@ -8,6 +8,7 @@ from src.adapters.connectors.github import CommentResult, FileDiff, PRMeta
 from src.adapters.renderers import PRCommentPayload
 from src.core.contracts import EventMeta, EventSource, EventType, PROpened
 from src.runtime.orchestrator import ToolRuntimePRCommentPoster, ToolRuntimePRContextProvider
+from src.runtime.stages import WorkflowStage
 from src.runtime.tools import ToolAuditEntry, ToolCall, ToolResult
 
 
@@ -82,9 +83,9 @@ def test_tool_runtime_pr_context_provider_collects_context_via_context_stage_too
     assert context.files[0].path == "src/runtime/tools/__init__.py"
     assert context.unified_diff.startswith("diff --git")
     assert [(call.stage, call.name, call.correlation_id) for call in runtime.calls] == [
-        ("context", "github.pr.view", "corr-tools"),
-        ("context", "github.pr.files", "corr-tools"),
-        ("context", "github.pr.diff", "corr-tools"),
+        (WorkflowStage.CONTEXT, "github.pr.view", "corr-tools"),
+        (WorkflowStage.CONTEXT, "github.pr.files", "corr-tools"),
+        (WorkflowStage.CONTEXT, "github.pr.diff", "corr-tools"),
     ]
 
 
@@ -98,7 +99,7 @@ def test_tool_runtime_pr_comment_poster_posts_via_output_stage_tool() -> None:
     assert result.id == 9876
     assert [(call.stage, call.name, call.input, call.correlation_id) for call in runtime.calls] == [
         (
-            "output",
+            WorkflowStage.OUTPUT,
             "github.pr.comment.create_or_update",
             {"repo_full_name": "octocat/hello-world", "pr_number": 77, "body": "report body", "marker": marker},
             "corr-tools",

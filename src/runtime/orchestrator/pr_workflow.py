@@ -6,6 +6,7 @@ from src.adapters.renderers import GitHubPRCommentRenderer, PRCommentPayload
 from src.core.analyzer import RuleBasedPRBehaviourAnalyzer
 from src.core.contracts import PREvent, QAReport, StrategyResult, ValidationOutcome, ValidationResult
 from src.core.strategy import RuleBasedPRStrategyEngine
+from src.runtime.stages import WorkflowStage
 
 from .pr_context import EventPRContextProvider, PRContextProvider
 from .types import (
@@ -41,15 +42,15 @@ class PRWorkflowOrchestrator:
 
     def run(self, event: PREvent) -> PRWorkflowResult:
         """Run the deterministic Step 3 PR workflow for one normalized event."""
-        stages: list[str] = []
+        stages: list[WorkflowStage] = []
 
-        stages.append("context")
+        stages.append(WorkflowStage.CONTEXT)
         context = self._context_provider.load(event)
 
-        stages.append("analyzer")
+        stages.append(WorkflowStage.ANALYZER)
         impact = self._analyzer.analyze(context)
 
-        stages.append("strategy")
+        stages.append(WorkflowStage.STRATEGY)
         strategy = self._strategy_engine.plan(
             repo_full_name=context.repo_full_name,
             pr_number=context.pr_number,
@@ -59,7 +60,7 @@ class PRWorkflowOrchestrator:
 
         validations: tuple[ValidationResult, ...]
         if self._should_validate(event, impact, strategy):
-            stages.append("validator")
+            stages.append(WorkflowStage.VALIDATOR)
             validations = self._validator.validate(strategy)
         else:
             validations = ()
@@ -73,7 +74,7 @@ class PRWorkflowOrchestrator:
             validations=validations,
             summary_markdown=impact.summary,
         )
-        stage_order = (*stages, "renderer")
+        stage_order = (*stages, WorkflowStage.RENDERER)
         draft = PRWorkflowDraft(event=event, report=report, stage_order=stage_order)
         comment_payload = self._renderer.render(draft)
         return PRWorkflowResult(

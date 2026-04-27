@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
+from src.runtime.stages import WorkflowStage
+
 from .types import ToolCall, ToolCapability, ToolDefinition
 
 
@@ -16,7 +18,7 @@ class StageToolPolicy:
 
     def __init__(
         self,
-        allowed_tools_by_stage: Mapping[str, tuple[str, ...]],
+        allowed_tools_by_stage: Mapping[WorkflowStage, tuple[str, ...]],
         *,
         allow_destructive: bool = False,
     ) -> None:

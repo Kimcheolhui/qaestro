@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from src.adapters.connectors.github import CommentResult
 from src.adapters.renderers import PRCommentPayload
+from src.runtime.stages import WorkflowStage
 from src.runtime.tools import ToolCall, ToolRuntime
 
 
@@ -16,7 +17,7 @@ class ToolRuntimePRCommentPoster:
     def post_comment(self, payload: PRCommentPayload, *, correlation_id: str) -> CommentResult:
         result = self._runtime.execute(
             ToolCall(
-                stage="output",
+                stage=WorkflowStage.OUTPUT,
                 name="github.pr.comment.create_or_update",
                 input={
                     "repo_full_name": payload.repo_full_name,

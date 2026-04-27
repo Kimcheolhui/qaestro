@@ -7,6 +7,7 @@ import pytest
 from src.adapters.connectors.github import CommentResult, FileDiff, PRMeta
 from src.adapters.renderers import PRCommentPayload
 from src.runtime.orchestrator import ToolRuntimePRCommentPoster
+from src.runtime.stages import WorkflowStage
 from src.runtime.tools import RegisteredToolRuntime, StageToolPolicy, ToolCall
 from src.runtime.tools.github import build_github_pr_tools
 
@@ -68,8 +69,8 @@ def _runtime(client: RecordingGitHubClient) -> RegisteredToolRuntime:
         tools=build_github_pr_tools(client),
         policy=StageToolPolicy(
             {
-                "context": ("github.pr.view", "github.pr.files", "github.pr.diff"),
-                "output": ("github.pr.comment.create_or_update",),
+                WorkflowStage.CONTEXT: ("github.pr.view", "github.pr.files", "github.pr.diff"),
+                WorkflowStage.OUTPUT: ("github.pr.comment.create_or_update",),
             }
         ),
     )
@@ -81,7 +82,7 @@ def test_github_pr_read_tools_call_client_and_return_normalized_outputs() -> Non
 
     view = runtime.execute(
         ToolCall(
-            stage="context",
+            stage=WorkflowStage.CONTEXT,
             name="github.pr.view",
             input={"repo_full_name": "octocat/hello-world", "pr_number": 42},
             correlation_id="corr-gh",
@@ -89,7 +90,7 @@ def test_github_pr_read_tools_call_client_and_return_normalized_outputs() -> Non
     )
     files = runtime.execute(
         ToolCall(
-            stage="context",
+            stage=WorkflowStage.CONTEXT,
             name="github.pr.files",
             input={"repo_full_name": "octocat/hello-world", "pr_number": 42},
             correlation_id="corr-gh",
@@ -97,7 +98,7 @@ def test_github_pr_read_tools_call_client_and_return_normalized_outputs() -> Non
     )
     diff = runtime.execute(
         ToolCall(
-            stage="context",
+            stage=WorkflowStage.CONTEXT,
             name="github.pr.diff",
             input={"repo_full_name": "octocat/hello-world", "pr_number": 42},
             correlation_id="corr-gh",
@@ -133,7 +134,7 @@ def test_github_pr_comment_tool_posts_rendered_body() -> None:
 
     result = runtime.execute(
         ToolCall(
-            stage="output",
+            stage=WorkflowStage.OUTPUT,
             name="github.pr.comment.create_or_update",
             input={
                 "repo_full_name": "octocat/hello-world",
@@ -170,7 +171,7 @@ def test_github_pr_comment_tool_updates_existing_qaestro_comment_when_marker_mat
 
     result = runtime.execute(
         ToolCall(
-            stage="output",
+            stage=WorkflowStage.OUTPUT,
             name="github.pr.comment.create_or_update",
             input={
                 "repo_full_name": "octocat/hello-world",

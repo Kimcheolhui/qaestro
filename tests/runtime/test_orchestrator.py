@@ -35,6 +35,7 @@ from src.runtime.orchestrator import (
     PRWorkflowResult,
     UnsupportedEventError,
 )
+from src.runtime.stages import WorkflowStage
 
 
 def _event_meta(event_id: str, event_type: EventType, correlation_id: str) -> EventMeta:
@@ -127,7 +128,13 @@ def test_event_orchestrator_dispatches_pr_events_to_pr_sub_orchestrator():
     assert isinstance(result, PRWorkflowResult)
     assert result.event is event
     assert result.correlation_id == "corr-001"
-    assert result.stage_order == ("context", "analyzer", "strategy", "validator", "renderer")
+    assert result.stage_order == (
+        WorkflowStage.CONTEXT,
+        WorkflowStage.ANALYZER,
+        WorkflowStage.STRATEGY,
+        WorkflowStage.VALIDATOR,
+        WorkflowStage.RENDERER,
+    )
     assert result.comment_payload.repo_full_name == "Kimcheolhui/qaestro"
     assert result.comment_payload.pr_number == 31
 
@@ -166,7 +173,13 @@ def test_pr_workflow_orchestrator_runs_stub_flow_and_renders_pr_comment_payload(
     assert isinstance(result, PRWorkflowResult)
     assert result.event is event
     assert result.correlation_id == "corr-001"
-    assert result.stage_order == ("context", "analyzer", "strategy", "validator", "renderer")
+    assert result.stage_order == (
+        WorkflowStage.CONTEXT,
+        WorkflowStage.ANALYZER,
+        WorkflowStage.STRATEGY,
+        WorkflowStage.VALIDATOR,
+        WorkflowStage.RENDERER,
+    )
     assert result.impact.summary.startswith("PR #31 (feat: add connector) changes 2 files")
     assert result.strategy.reasoning.startswith("High risk")
     assert len(result.validations) == 3
@@ -208,7 +221,12 @@ def test_pr_workflow_orchestrator_can_skip_validation_via_policy_hook():
     result = orchestrator.run(_pr_opened_event())
 
     assert result.validations == ()
-    assert result.stage_order == ("context", "analyzer", "strategy", "renderer")
+    assert result.stage_order == (
+        WorkflowStage.CONTEXT,
+        WorkflowStage.ANALYZER,
+        WorkflowStage.STRATEGY,
+        WorkflowStage.RENDERER,
+    )
     assert "Validation not executed" in result.comment_payload.body
 
 
@@ -281,4 +299,10 @@ def test_pr_workflow_orchestrator_accepts_replaceable_components():
     assert validator.calls == [result.strategy]
     assert result.impact.summary == "custom impact"
     assert result.strategy.reasoning == "custom strategy"
-    assert result.stage_order == ("context", "analyzer", "strategy", "validator", "renderer")
+    assert result.stage_order == (
+        WorkflowStage.CONTEXT,
+        WorkflowStage.ANALYZER,
+        WorkflowStage.STRATEGY,
+        WorkflowStage.VALIDATOR,
+        WorkflowStage.RENDERER,
+    )

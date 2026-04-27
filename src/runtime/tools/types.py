@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
+from src.runtime.stages import WorkflowStage
+
 
 class ToolCapability(StrEnum):
     """High-level capability class used by stage policy gates."""
@@ -21,7 +23,7 @@ class ToolCapability(StrEnum):
 class ToolCall:
     """One auditable tool execution request emitted by a workflow stage."""
 
-    stage: str
+    stage: WorkflowStage
     name: str
     input: Mapping[str, Any]
     correlation_id: str
@@ -41,7 +43,7 @@ class ToolResult:
 class ToolAuditEntry:
     """Small in-memory audit record for deterministic tool execution."""
 
-    stage: str
+    stage: WorkflowStage
     name: str
     correlation_id: str
     ok: bool

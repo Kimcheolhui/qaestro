@@ -11,6 +11,7 @@ from src.runtime.orchestrator import (
     ToolRuntimePRCommentPoster,
     ToolRuntimePRContextProvider,
 )
+from src.runtime.stages import WorkflowStage
 from src.runtime.tools import RegisteredToolRuntime, StageToolPolicy
 from src.runtime.tools.github import build_github_pr_tools
 from src.shared.config import AppConfig
@@ -43,8 +44,8 @@ def _build_github_tool_runtime(client: GitHubClient) -> RegisteredToolRuntime:
         tools=build_github_pr_tools(client),
         policy=StageToolPolicy(
             {
-                "context": ("github.pr.view", "github.pr.files", "github.pr.diff"),
-                "output": ("github.pr.comment.create_or_update",),
+                WorkflowStage.CONTEXT: ("github.pr.view", "github.pr.files", "github.pr.diff"),
+                WorkflowStage.OUTPUT: ("github.pr.comment.create_or_update",),
             }
         ),
     )

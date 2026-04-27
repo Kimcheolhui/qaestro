@@ -13,6 +13,7 @@ from src.adapters.renderers import PRCommentPayload
 from src.app.worker import EventJob, InMemoryJobQueue, MalformedEventJob, Worker, WorkerStatus
 from src.core.contracts import Event, EventMeta, EventSource, EventType, PROpened
 from src.runtime.orchestrator import PRWorkflowResult
+from src.runtime.stages import WorkflowStage
 
 
 def _event() -> PROpened:
@@ -67,7 +68,7 @@ def _result(event: PROpened) -> PRWorkflowResult:
         event=event,
         report=object(),  # type: ignore[arg-type]
         comment_payload=payload,
-        stage_order=("analyzer", "strategy", "renderer"),
+        stage_order=(WorkflowStage.ANALYZER, WorkflowStage.STRATEGY, WorkflowStage.RENDERER),
     )
 
 

@@ -7,6 +7,7 @@ from typing import overload
 from src.adapters.connectors.github import FileDiff, PRMeta
 from src.core.analyzer import PRAnalysisContext, PRFileDiff, PRFileStatus
 from src.core.contracts import PREvent
+from src.runtime.stages import WorkflowStage
 from src.runtime.tools import ToolCall, ToolResult, ToolRuntime
 
 
@@ -21,7 +22,7 @@ class ToolRuntimePRContextProvider:
         meta = _expect_output(
             self._runtime.execute(
                 ToolCall(
-                    stage="context",
+                    stage=WorkflowStage.CONTEXT,
                     name="github.pr.view",
                     input=common_input,
                     correlation_id=event.meta.correlation_id,
@@ -32,7 +33,7 @@ class ToolRuntimePRContextProvider:
         files = _expect_file_tuple(
             self._runtime.execute(
                 ToolCall(
-                    stage="context",
+                    stage=WorkflowStage.CONTEXT,
                     name="github.pr.files",
                     input=common_input,
                     correlation_id=event.meta.correlation_id,
@@ -42,7 +43,7 @@ class ToolRuntimePRContextProvider:
         unified_diff = _expect_output(
             self._runtime.execute(
                 ToolCall(
-                    stage="context",
+                    stage=WorkflowStage.CONTEXT,
                     name="github.pr.diff",
                     input=common_input,
                     correlation_id=event.meta.correlation_id,

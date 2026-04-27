@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from src.runtime.stages import WorkflowStage
 from src.runtime.tools import (
     RegisteredToolRuntime,
     StageToolPolicy,
@@ -23,12 +24,12 @@ def test_registered_tool_runtime_executes_allowed_tool_and_records_audit_log() -
                 handler=lambda call: {"value": call.input["value"]},
             ),
         ),
-        policy=StageToolPolicy({"context": ("demo.read",)}),
+        policy=StageToolPolicy({WorkflowStage.CONTEXT: ("demo.read",)}),
     )
 
     result = runtime.execute(
         ToolCall(
-            stage="context",
+            stage=WorkflowStage.CONTEXT,
             name="demo.read",
             input={"value": "ok"},
             correlation_id="corr-tools",
@@ -39,7 +40,7 @@ def test_registered_tool_runtime_executes_allowed_tool_and_records_audit_log() -
     assert result.output == {"value": "ok"}
     assert result.error == ""
     assert [(entry.stage, entry.name, entry.correlation_id, entry.ok) for entry in runtime.audit_log] == [
-        ("context", "demo.read", "corr-tools", True)
+        (WorkflowStage.CONTEXT, "demo.read", "corr-tools", True)
     ]
 
 
@@ -52,11 +53,13 @@ def test_registered_tool_runtime_rejects_tools_not_allowed_for_stage() -> None:
                 handler=lambda call: None,
             ),
         ),
-        policy=StageToolPolicy({"context": ("demo.read",)}),
+        policy=StageToolPolicy({WorkflowStage.CONTEXT: ("demo.read",)}),
     )
 
     with pytest.raises(ToolPolicyError, match="not allowed"):
-        runtime.execute(ToolCall(stage="context", name="demo.write", input={}, correlation_id="corr-denied"))
+        runtime.execute(
+            ToolCall(stage=WorkflowStage.CONTEXT, name="demo.write", input={}, correlation_id="corr-denied")
+        )
 
     assert runtime.audit_log == ()
 
@@ -70,10 +73,12 @@ def test_registered_tool_runtime_denies_destructive_tools_by_default() -> None:
                 handler=lambda call: "deleted",
             ),
         ),
-        policy=StageToolPolicy({"output": ("demo.delete",)}),
+        policy=StageToolPolicy({WorkflowStage.OUTPUT: ("demo.delete",)}),
     )
 
     with pytest.raises(ToolPolicyError, match="destructive"):
-        runtime.execute(ToolCall(stage="output", name="demo.delete", input={}, correlation_id="corr-danger"))
+        runtime.execute(
+            ToolCall(stage=WorkflowStage.OUTPUT, name="demo.delete", input={}, correlation_id="corr-danger")
+        )
 
     assert runtime.audit_log == ()
