@@ -46,12 +46,13 @@ class RecordingOrchestrator:
         return self._result
 
 
-class RecordingCommentPoster:
+class RecordingOutputPoster:
     def __init__(self) -> None:
         self.payloads: list[PRCommentPayload] = []
 
-    def post_comment(self, payload: PRCommentPayload) -> None:
+    def post_comment(self, payload: PRCommentPayload, *, correlation_id: str) -> object:
         self.payloads.append(payload)
+        return correlation_id
 
 
 def _result(event: PROpened) -> PRWorkflowResult:
@@ -73,8 +74,8 @@ def _result(event: PROpened) -> PRWorkflowResult:
 def test_worker_processes_single_event_and_posts_comment() -> None:
     event = _event()
     orchestrator = RecordingOrchestrator(_result(event))
-    poster = RecordingCommentPoster()
-    worker = Worker(orchestrator=orchestrator, comment_poster=poster)
+    poster = RecordingOutputPoster()
+    worker = Worker(orchestrator=orchestrator, output_poster=poster)
 
     result = worker.process(EventJob(event=event, correlation_id=event.meta.correlation_id))
 
@@ -100,8 +101,8 @@ def test_worker_retries_transient_failure_and_reports_attempt_count() -> None:
             return result
 
     orchestrator = FlakyOrchestrator()
-    poster = RecordingCommentPoster()
-    worker = Worker(orchestrator=orchestrator, comment_poster=poster, max_attempts=2)
+    poster = RecordingOutputPoster()
+    worker = Worker(orchestrator=orchestrator, output_poster=poster, max_attempts=2)
 
     execution = worker.process(EventJob(event=event, correlation_id=event.meta.correlation_id))
 
@@ -123,8 +124,8 @@ def test_worker_reports_failure_after_retries_exhausted() -> None:
             raise RuntimeError("boom")
 
     orchestrator = FailingOrchestrator()
-    poster = RecordingCommentPoster()
-    worker = Worker(orchestrator=orchestrator, comment_poster=poster, max_attempts=2)
+    poster = RecordingOutputPoster()
+    worker = Worker(orchestrator=orchestrator, output_poster=poster, max_attempts=2)
 
     execution = worker.process(EventJob(event=event, correlation_id=event.meta.correlation_id))
 
@@ -143,8 +144,8 @@ def test_worker_enforces_timeout_per_attempt() -> None:
             time.sleep(0.05)
             return _result(event)
 
-    poster = RecordingCommentPoster()
-    worker = Worker(orchestrator=SlowOrchestrator(), comment_poster=poster, max_attempts=1, timeout_seconds=0.01)
+    poster = RecordingOutputPoster()
+    worker = Worker(orchestrator=SlowOrchestrator(), output_poster=poster, max_attempts=1, timeout_seconds=0.01)
 
     start = time.monotonic()
     execution = worker.process(EventJob(event=event, correlation_id=event.meta.correlation_id))
@@ -171,7 +172,7 @@ def test_worker_acks_successful_queue_jobs() -> None:
             self.acked.append(job)
 
     queue = AckRecordingQueue()
-    worker = Worker(comment_poster=RecordingCommentPoster())
+    worker = Worker(output_poster=RecordingOutputPoster())
 
     executions = worker.run_until_empty(queue)
 

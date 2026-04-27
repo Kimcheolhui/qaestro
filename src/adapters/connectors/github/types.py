@@ -40,7 +40,8 @@ class FileDiff:
 
 @dataclass(frozen=True)
 class CommentResult:
-    """Result of creating an issue/PR comment."""
+    """Result of creating, updating, or reading an issue/PR comment."""
 
     id: int
     html_url: str
+    body: str = ""

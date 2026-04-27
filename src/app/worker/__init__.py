@@ -17,23 +17,18 @@ from ..jobs import (
 )
 from .entrypoint import main
 from .factory import build_worker
-from .github import GitHubCommentPoster, GitHubIssueCommentClient, GitHubPRContextClient, GitHubPRContextProvider
-from .runner import CommentPoster, NoopCommentPoster, Orchestrator, Worker
+from .runner import NoopOutputPoster, Orchestrator, OutputPoster, Worker
 from .types import WorkerExecution, WorkerExecutionContext, WorkerStatus
 
 __all__ = [
-    "CommentPoster",
     "EnqueueQueue",
     "EventJob",
-    "GitHubCommentPoster",
-    "GitHubIssueCommentClient",
-    "GitHubPRContextClient",
-    "GitHubPRContextProvider",
     "InMemoryJobQueue",
     "JobQueue",
     "MalformedEventJob",
-    "NoopCommentPoster",
+    "NoopOutputPoster",
     "Orchestrator",
+    "OutputPoster",
     "QueuedJob",
     "RedisStreamsJobQueue",
     "Worker",

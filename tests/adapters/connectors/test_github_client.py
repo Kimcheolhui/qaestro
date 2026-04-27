@@ -259,6 +259,52 @@ def test_create_issue_comment_rejects_empty_body(client):
         client.create_issue_comment(OWNER, REPO, PR_NUM, "   ")
 
 
+# ── list/update issue comments ───────────────────────────────────────────
+
+
+def test_list_issue_comments_handles_pagination(client, transport):
+    page1 = [{"id": i, "html_url": f"https://github.com/x/comments/{i}", "body": f"comment {i}"} for i in range(100)]
+    page2 = [{"id": 200, "html_url": "https://github.com/x/comments/200", "body": "qaestro-marker"}]
+    transport.route(
+        "GET",
+        f"https://api.github.com/repos/{OWNER}/{REPO}/issues/{PR_NUM}/comments?per_page=100&page=1",
+        FakeResponse(status=200, body=json.dumps(page1).encode()),
+    )
+    transport.route(
+        "GET",
+        f"https://api.github.com/repos/{OWNER}/{REPO}/issues/{PR_NUM}/comments?per_page=100&page=2",
+        FakeResponse(status=200, body=json.dumps(page2).encode()),
+    )
+
+    comments = client.list_issue_comments(OWNER, REPO, PR_NUM)
+
+    assert len(comments) == 101
+    assert comments[-1].id == 200
+    assert comments[-1].body == "qaestro-marker"
+
+
+def test_update_issue_comment_patches_body(client, transport):
+    transport.route(
+        "PATCH",
+        f"https://api.github.com/repos/{OWNER}/{REPO}/issues/comments/555",
+        FakeResponse(
+            status=200,
+            body=json.dumps(
+                {"id": 555, "html_url": "https://github.com/x/comments/555", "body": "updated report"}
+            ).encode(),
+        ),
+    )
+
+    result = client.update_issue_comment(OWNER, REPO, 555, "updated report")
+
+    assert result.id == 555
+    assert result.body == "updated report"
+    api_call = next(c for c in transport.calls if "/issues/comments/555" in c.url)
+    assert api_call.method == "PATCH"
+    assert json.loads(api_call.body) == {"body": "updated report"}
+    assert api_call.headers["Content-Type"] == "application/json"
+
+
 # ── error mapping ────────────────────────────────────────────────────────
 
 

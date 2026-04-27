@@ -15,12 +15,13 @@ FIXTURES = Path(__file__).parents[1] / "fixtures"
 SECRET = "test-secret"
 
 
-class RecordingCommentPoster:
+class RecordingOutputPoster:
     def __init__(self) -> None:
         self.payloads: list[PRCommentPayload] = []
 
-    def post_comment(self, payload: PRCommentPayload) -> None:
+    def post_comment(self, payload: PRCommentPayload, *, correlation_id: str) -> object:
         self.payloads.append(payload)
+        return correlation_id
 
 
 def _signature(body: bytes) -> str:
@@ -32,8 +33,8 @@ def test_github_webhook_job_runs_through_worker_and_posts_comment() -> None:
     body = (FIXTURES / "github_pr_opened.json").read_bytes()
     queue = InMemoryJobQueue()
     gateway = GitHubWebhookGateway(secret=SECRET, queue=queue)
-    poster = RecordingCommentPoster()
-    worker = Worker(comment_poster=poster)
+    poster = RecordingOutputPoster()
+    worker = Worker(output_poster=poster)
 
     response = gateway.handle(
         WebhookRequest(

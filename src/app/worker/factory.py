@@ -5,11 +5,17 @@ from __future__ import annotations
 from pathlib import Path
 
 from src.adapters.connectors.github import GitHubAppAuth, GitHubClient
-from src.runtime.orchestrator import EventOrchestrator, PRWorkflowOrchestrator
+from src.runtime.orchestrator import (
+    EventOrchestrator,
+    PRWorkflowOrchestrator,
+    ToolRuntimePRCommentPoster,
+    ToolRuntimePRContextProvider,
+)
+from src.runtime.tools import RegisteredToolRuntime, StageToolPolicy
+from src.runtime.tools.github import build_github_pr_tools
 from src.shared.config import AppConfig
 
-from .github import GitHubCommentPoster, GitHubPRContextProvider
-from .runner import NoopCommentPoster, Worker
+from .runner import Worker
 
 
 def build_worker(cfg: AppConfig) -> Worker:
@@ -20,14 +26,27 @@ def build_worker(cfg: AppConfig) -> Worker:
     worker could silently consume Redis jobs without publishing review comments.
     """
     if cfg.queue_backend == "memory":
-        return Worker(comment_poster=NoopCommentPoster())
+        return Worker()
 
     client = _build_github_client(cfg)
+    tool_runtime = _build_github_tool_runtime(client)
     return Worker(
         orchestrator=EventOrchestrator(
-            pr_orchestrator=PRWorkflowOrchestrator(context_provider=GitHubPRContextProvider(client))
+            pr_orchestrator=PRWorkflowOrchestrator(context_provider=ToolRuntimePRContextProvider(tool_runtime))
         ),
-        comment_poster=GitHubCommentPoster(client),
+        output_poster=ToolRuntimePRCommentPoster(tool_runtime),
+    )
+
+
+def _build_github_tool_runtime(client: GitHubClient) -> RegisteredToolRuntime:
+    return RegisteredToolRuntime(
+        tools=build_github_pr_tools(client),
+        policy=StageToolPolicy(
+            {
+                "context": ("github.pr.view", "github.pr.files", "github.pr.diff"),
+                "output": ("github.pr.comment.create_or_update",),
+            }
+        ),
     )
 
 
