@@ -40,6 +40,7 @@ def test_workflow_stage_enum_defines_runtime_stage_values() -> None:
     assert issubclass(WorkflowStage, StrEnum)
     assert tuple(stage.value for stage in WorkflowStage) == (
         "context",
+        "triage",
         "analyzer",
         "strategy",
         "validator",
@@ -64,6 +65,7 @@ def test_pr_workflow_reports_closed_stage_enum_order() -> None:
 
     assert result.stage_order == (
         WorkflowStage.CONTEXT,
+        WorkflowStage.TRIAGE,
         WorkflowStage.ANALYZER,
         WorkflowStage.STRATEGY,
         WorkflowStage.VALIDATOR,

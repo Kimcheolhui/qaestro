@@ -164,7 +164,8 @@ class Worker:
                 lambda: self._orchestrator.run(job.event),
                 timeout_seconds=context.timeout_seconds,
             )
-            self._output_poster.post_comment(result.comment_payload, correlation_id=job.correlation_id)
+            if result.comment_payload is not None:
+                self._output_poster.post_comment(result.comment_payload, correlation_id=job.correlation_id)
             return result
         return self._run_pipeline(job, context)
 
@@ -174,7 +175,8 @@ class Worker:
         # later milestones.
         _ = context.agent_runner
         result = self._orchestrator.run(job.event)
-        self._output_poster.post_comment(result.comment_payload, correlation_id=job.correlation_id)
+        if result.comment_payload is not None:
+            self._output_poster.post_comment(result.comment_payload, correlation_id=job.correlation_id)
         return result
 
 

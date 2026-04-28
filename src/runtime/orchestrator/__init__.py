@@ -11,6 +11,7 @@ from .ci_workflow import CIWorkflowOrchestrator
 from .dispatcher import EventOrchestrator
 from .pr_context import EventPRContextProvider, PRContextProvider
 from .pr_event_stubs import PRCommentWorkflowOrchestrator, PRReviewWorkflowOrchestrator
+from .pr_triage import PRWorkflowDepth, PRWorkflowTriage, RuleBasedPRWorkflowTriageClassifier
 from .pr_workflow import PRWorkflowOrchestrator, StubPRRuntimeValidator
 from .tool_context import ToolRuntimePRContextProvider
 from .tool_output import ToolRuntimePRCommentPoster
@@ -18,6 +19,7 @@ from .types import (
     PRBehaviourAnalyzer,
     PRRuntimeValidator,
     PRStrategyEngine,
+    PRTriageClassifier,
     PRWorkflowDraft,
     PRWorkflowRenderer,
     PRWorkflowResult,
@@ -36,10 +38,14 @@ __all__ = [
     "PRReviewWorkflowOrchestrator",
     "PRRuntimeValidator",
     "PRStrategyEngine",
+    "PRTriageClassifier",
+    "PRWorkflowDepth",
     "PRWorkflowDraft",
     "PRWorkflowOrchestrator",
     "PRWorkflowRenderer",
     "PRWorkflowResult",
+    "PRWorkflowTriage",
+    "RuleBasedPRWorkflowTriageClassifier",
     "ShouldValidate",
     "StubPRRuntimeValidator",
     "ToolRuntimePRCommentPoster",

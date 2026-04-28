@@ -11,6 +11,8 @@ from src.core.analyzer import PRAnalysisContext
 from src.core.contracts import BehaviourImpact, PREvent, QAReport, StrategyResult, ValidationResult
 from src.runtime.stages import WorkflowStage
 
+from .pr_triage import PRWorkflowTriage
+
 
 class UnsupportedEventError(RuntimeError):
     """Raised when an event has no supported workflow orchestration yet."""
@@ -27,6 +29,7 @@ class PRWorkflowDraft:
 
     event: PREvent
     report: QAReport
+    triage: PRWorkflowTriage
     stage_order: tuple[WorkflowStage, ...]
 
     @property
@@ -52,7 +55,8 @@ class PRWorkflowResult:
 
     event: PREvent
     report: QAReport
-    comment_payload: PRCommentPayload
+    triage: PRWorkflowTriage
+    comment_payload: PRCommentPayload | None
     stage_order: tuple[WorkflowStage, ...]
 
     @property
@@ -101,6 +105,12 @@ class PRRuntimeValidator(Protocol):
     """Validate planned PR workflow strategy actions."""
 
     def validate(self, strategy: StrategyResult) -> tuple[ValidationResult, ...]: ...
+
+
+class PRTriageClassifier(Protocol):
+    """Choose workflow depth after PR context acquisition."""
+
+    def classify(self, context: PRAnalysisContext) -> PRWorkflowTriage: ...
 
 
 ShouldValidate = Callable[[PREvent, BehaviourImpact, StrategyResult], bool]

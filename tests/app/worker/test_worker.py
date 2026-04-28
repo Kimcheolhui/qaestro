@@ -12,7 +12,7 @@ import pytest
 from src.adapters.renderers import PRCommentPayload
 from src.app.worker import EventJob, InMemoryJobQueue, MalformedEventJob, Worker, WorkerStatus
 from src.core.contracts import Event, EventMeta, EventSource, EventType, PROpened
-from src.runtime.orchestrator import PRWorkflowResult
+from src.runtime.orchestrator import PRWorkflowDepth, PRWorkflowResult, PRWorkflowTriage
 from src.runtime.stages import WorkflowStage
 
 
@@ -67,6 +67,11 @@ def _result(event: PROpened) -> PRWorkflowResult:
     return PRWorkflowResult(
         event=event,
         report=object(),  # type: ignore[arg-type]
+        triage=PRWorkflowTriage(
+            depth=PRWorkflowDepth.NORMAL,
+            rationale="worker test result",
+            allowed_stages=(WorkflowStage.ANALYZER, WorkflowStage.STRATEGY, WorkflowStage.VALIDATOR),
+        ),
         comment_payload=payload,
         stage_order=(WorkflowStage.ANALYZER, WorkflowStage.STRATEGY, WorkflowStage.RENDERER),
     )

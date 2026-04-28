@@ -142,7 +142,13 @@ def _area_description(path_group: str, files: tuple[PRFileDiff, ...]) -> str:
 
 def _max_risk(risks: Iterable[RiskLevel], *, default: RiskLevel) -> RiskLevel:
     """Return the highest risk while keeping empty inputs deterministic."""
-    order = {RiskLevel.LOW: 0, RiskLevel.MEDIUM: 1, RiskLevel.HIGH: 2, RiskLevel.CRITICAL: 3}
+    order = {
+        RiskLevel.NOT_ASSESSED: -1,
+        RiskLevel.LOW: 0,
+        RiskLevel.MEDIUM: 1,
+        RiskLevel.HIGH: 2,
+        RiskLevel.CRITICAL: 3,
+    }
     risk_values = tuple(risks)
     if not risk_values:
         return default
