@@ -74,6 +74,7 @@ def test_valid_workflow_run_webhook_enqueues_normalized_ci_event() -> None:
     assert job.event.meta.event_type == EventType.CI_COMPLETED
     assert job.event.meta.correlation_id == "delivery-ci-001"
     assert job.event.workflow_name == "CI Pipeline"
+    assert job.event.run_id == 5551234567
 
 
 def test_invalid_signature_rejects_without_enqueueing() -> None:

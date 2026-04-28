@@ -86,6 +86,7 @@ class TestGitHubCIReplay:
         assert event.pr_number == 123
         assert event.repo_full_name == "acme-corp/web-api"
         assert event.workflow_name == "CI Pipeline"
+        assert event.run_id == 5551234567
         assert len(event.failed_jobs) == 0
 
     def test_ci_failure(self):

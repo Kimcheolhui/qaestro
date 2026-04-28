@@ -232,6 +232,66 @@ def test_get_pull_request_diff_uses_diff_accept_header(client, transport):
     assert api_call.headers["Accept"] == "application/vnd.github.diff"
 
 
+# ── list_workflow_run_jobs ────────────────────────────────────────────────
+
+
+def test_list_workflow_run_jobs_returns_actions_job_results(client, transport):
+    jobs_payload = {
+        "jobs": [
+            {
+                "name": "tests",
+                "conclusion": "failure",
+                "html_url": "https://github.com/octocat/hello-world/actions/runs/99/job/1",
+            },
+            {
+                "name": "lint",
+                "conclusion": "success",
+                "html_url": "https://github.com/octocat/hello-world/actions/runs/99/job/2",
+            },
+        ]
+    }
+    transport.route(
+        "GET",
+        f"https://api.github.com/repos/{OWNER}/{REPO}/actions/runs/99/jobs?per_page=100&page=1",
+        FakeResponse(status=200, body=json.dumps(jobs_payload).encode()),
+    )
+
+    jobs = client.list_workflow_run_jobs(OWNER, REPO, 99)
+
+    assert [job.name for job in jobs] == ["tests", "lint"]
+    assert [job.conclusion for job in jobs] == ["failure", "success"]
+    assert jobs[0].html_url.endswith("/job/1")
+
+
+def test_list_workflow_run_jobs_handles_pagination(client, transport):
+    page1 = {
+        "jobs": [
+            {"name": f"job-{i}", "conclusion": "success", "html_url": f"https://example.com/{i}"} for i in range(100)
+        ]
+    }
+    page2 = {"jobs": [{"name": "last", "conclusion": "failure", "html_url": "https://example.com/last"}]}
+    transport.route(
+        "GET",
+        f"https://api.github.com/repos/{OWNER}/{REPO}/actions/runs/99/jobs?per_page=100&page=1",
+        FakeResponse(status=200, body=json.dumps(page1).encode()),
+    )
+    transport.route(
+        "GET",
+        f"https://api.github.com/repos/{OWNER}/{REPO}/actions/runs/99/jobs?per_page=100&page=2",
+        FakeResponse(status=200, body=json.dumps(page2).encode()),
+    )
+
+    jobs = client.list_workflow_run_jobs(OWNER, REPO, 99)
+
+    assert len(jobs) == 101
+    assert jobs[-1].name == "last"
+
+
+def test_list_workflow_run_jobs_validates_run_id(client):
+    with pytest.raises(ValueError, match="run_id"):
+        client.list_workflow_run_jobs(OWNER, REPO, 0)
+
+
 # ── create_issue_comment ─────────────────────────────────────────────────
 
 

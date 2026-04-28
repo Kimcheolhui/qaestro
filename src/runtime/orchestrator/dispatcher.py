@@ -5,7 +5,7 @@ from __future__ import annotations
 from src.core.contracts import ChatMention, CICompleted, Event, PRCommented, PREvent, PRReviewed
 
 from .chat_workflow import ChatWorkflowOrchestrator
-from .ci_workflow import CIWorkflowOrchestrator
+from .ci_workflow import CIWorkflowOrchestrator, CIWorkflowResult
 from .pr_event_stubs import PRCommentWorkflowOrchestrator, PRReviewWorkflowOrchestrator
 from .pr_workflow import PRWorkflowOrchestrator
 from .types import PRWorkflowResult, UnsupportedEventError
@@ -29,7 +29,7 @@ class EventOrchestrator:
         self._ci_orchestrator = ci_orchestrator or CIWorkflowOrchestrator()
         self._chat_orchestrator = chat_orchestrator or ChatWorkflowOrchestrator()
 
-    def run(self, event: Event) -> PRWorkflowResult:
+    def run(self, event: Event) -> PRWorkflowResult | CIWorkflowResult:
         if isinstance(event, PREvent):
             return self._pr_orchestrator.run(event)
         if isinstance(event, PRCommented):

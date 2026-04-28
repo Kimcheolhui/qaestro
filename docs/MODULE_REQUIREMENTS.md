@@ -153,6 +153,9 @@ qaestro를 구현할 때 참고할 수 있는 모듈 단위 요구사항 문서.
 **필수 요구사항**
 
 - PR 이벤트와 CI 이벤트를 같은 context로 묶을 수 있어야 함
+- PR 단위 aggregate state 안에서 head commit별 revision, CI/check snapshot, review run history를 분리해 관리할 수 있어야 함
+- current verdict/readiness는 current `head_sha`의 diff와 CI/check 결과를 source of truth로 삼고, 이전 revision 결과는 historical evidence로만 활용할 수 있어야 함
+- automatic final review는 relevant CI/check 완료를 기다리되, explicit `@qaestro`/channel 요청에는 pending 상태를 명시한 interim response를 줄 수 있어야 함
 - Behaviour Analyzer -> Strategy Engine -> Runtime Validator -> Renderer 순서를 통제할 수 있어야 함
 - validation 실행 여부를 risk level, event type, policy 기준으로 분기할 수 있어야 함
 - 단계별로 agent 또는 deterministic runner에게 허용할 tool 범위를 정하고, read/write/destructive action을 구분할 수 있어야 함
@@ -193,6 +196,8 @@ qaestro를 구현할 때 참고할 수 있는 모듈 단위 요구사항 문서.
 
 - `ToolCall`, `ToolResult`, `ToolRuntime`, stage별 allowed tool policy를 최소 contract로 제공
 - context/output 단계에서 GitHub PR read/write capability를 narrow tool로 실행 가능해야 함
+- CI feedback loop에서는 GitHub Actions workflow run/jobs/check state 조회도 context-stage read capability로 제공할 수 있어야 함
+- GitHub review/inline comment 작성은 managed PR summary comment와 별도의 output write capability로 확장 가능해야 함
 - GitHub backend는 기존 GitHub Client API adapter를 유지할 수 있어야 함
 - raw shell/CLI를 노출하지 않고, destructive action은 기본 금지해야 함
 - agent runner 도입 전에는 deterministic tool sequence로 실행 가능해야 함
@@ -448,6 +453,8 @@ qaestro를 구현할 때 참고할 수 있는 모듈 단위 요구사항 문서.
 **필수 요구사항**
 
 - GitHub PR comment용 구조화 출력 우선 지원
+- 같은 PR의 managed summary comment를 idempotent하게 update할 수 있어야 함
+- GitHub review/inline comment처럼 특정 file/line/range에 붙는 출력 표면을 PR summary comment와 분리해 확장 가능해야 함
 - 이후 Slack/Teams 자연어 응답 포맷 확장 가능해야 함
 - 판단 로직을 넣지 않고 formatting만 담당할 것
 
@@ -486,6 +493,7 @@ qaestro를 구현할 때 참고할 수 있는 모듈 단위 요구사항 문서.
 - provider SDK를 domain logic와 분리
 - GitHub connector와 ChatOps connector를 독립적으로 교체 가능해야 함
 - PR metadata/diff/files/comments/reviews 조회와 PR/comment 작성 capability를 tool로 노출 가능한 형태로 유지할 것
+- GitHub Actions workflow run/jobs/check state 조회와 PR review/inline comment 작성 API를 ToolRuntime capability로 감쌀 수 있어야 함
 - ChatOps connector도 thread context read와 response write를 분리해 policy 적용이 가능해야 함
 - runtime/knowledge/storage provider와의 결합을 connector 밖으로 새지 않게 할 것
 
@@ -593,7 +601,7 @@ qaestro를 구현할 때 참고할 수 있는 모듈 단위 요구사항 문서.
 | 2    | Event → Worker → Output 골격 연결 | `app/gateway`, `app/worker`, `runtime/orchestrator`, `adapters/connectors`(GitHub), `adapters/renderers` | PR 이벤트 → worker → stub 결과 반환                             |
 | 3    | GitHub PR 분석 vertical slice     | `core/analyzer`, `core/strategy`, `core/knowledge`(interface+mock), `adapters/renderers`                 | PR 오픈 시 Behaviour Impact Report 자동 생성                    |
 | 3.5  | Tool Runtime 경계 정리            | `runtime/tools`, `runtime/orchestrator`, `adapters/connectors`(GitHub), `app/worker`                     | PR read/write가 stage policy를 거친 ToolRuntime으로 실행        |
-| 4    | CI 결과 피드백 루프               | `runtime/orchestrator`, `runtime/tools`, `core/strategy`, `adapters/renderers`                           | CI 실패를 PR 맥락에 엮어 설명 가능                              |
+| 4    | CI 결과 피드백 루프               | `runtime/orchestrator`, `runtime/tools`, `core/strategy`, `adapters/renderers`                           | PR/CI/check를 PR aggregate로 묶고, current head 기준 unified review 가능 |
 | 5    | Runtime Validation MVP            | `runtime/validator`, `runtime/tools`, Microsoft Agent Framework 연결                                     | 선택된 PR에 대해 runtime validation 실행 및 결과 반영           |
 | 6    | ChatOps 흐름 연결                 | `app/gateway`(chat), `runtime/tools`, `adapters/connectors`(ChatOps), `adapters/renderers`               | `@qaestro` 호출 시 전략 제안, PR 맥락과 연결                    |
 | 7    | Knowledge Store 실 adapter 적용   | `adapters/knowledge`, `core/strategy`                                                                    | 실제 backing store 연결, 과거 패턴 조회 가능, adapter 교체 가능 |

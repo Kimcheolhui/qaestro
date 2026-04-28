@@ -11,8 +11,14 @@ import pytest
 
 from src.adapters.renderers import PRCommentPayload
 from src.app.worker import EventJob, InMemoryJobQueue, MalformedEventJob, Worker, WorkerStatus
-from src.core.contracts import Event, EventMeta, EventSource, EventType, PROpened
-from src.runtime.orchestrator import PRWorkflowDepth, PRWorkflowResult, PRWorkflowTriage
+from src.core.contracts import CICompleted, Event, EventMeta, EventSource, EventType, PROpened
+from src.runtime.orchestrator import (
+    CIWorkflowDepth,
+    CIWorkflowResult,
+    PRWorkflowDepth,
+    PRWorkflowResult,
+    PRWorkflowTriage,
+)
 from src.runtime.stages import WorkflowStage
 
 
@@ -36,13 +42,31 @@ def _event() -> PROpened:
     )
 
 
+def _ci_event() -> CICompleted:
+    return CICompleted(
+        meta=EventMeta(
+            event_id="evt-ci-worker-001",
+            event_type=EventType.CI_COMPLETED,
+            correlation_id="corr-ci-worker-001",
+            timestamp=datetime(2026, 4, 28, 12, 0, tzinfo=UTC),
+            source=EventSource.GITHUB,
+        ),
+        repo_full_name="Kimcheolhui/qaestro",
+        pr_number=None,
+        commit_sha="abc123",
+        workflow_name="Tests",
+        conclusion="failure",
+        run_url="https://github.com/Kimcheolhui/qaestro/actions/runs/99",
+        run_id=99,
+    )
+
+
 class RecordingOrchestrator:
-    def __init__(self, result: PRWorkflowResult) -> None:
-        self.events: list[PROpened] = []
+    def __init__(self, result: PRWorkflowResult | CIWorkflowResult) -> None:
+        self.events: list[Event] = []
         self._result = result
 
-    def run(self, event: Event) -> PRWorkflowResult:
-        assert isinstance(event, PROpened)
+    def run(self, event: Event) -> PRWorkflowResult | CIWorkflowResult:
         self.events.append(event)
         return self._result
 
@@ -89,6 +113,26 @@ def test_worker_processes_single_event_and_posts_comment() -> None:
     assert result.correlation_id == "corr-worker-001"
     assert orchestrator.events == [event]
     assert poster.payloads == [orchestrator._result.comment_payload]
+
+
+def test_worker_treats_ci_no_output_result_as_success_without_posting() -> None:
+    event = _ci_event()
+    ci_result = CIWorkflowResult(
+        event=event,
+        depth=CIWorkflowDepth.ORPHAN,
+        summary="No pull request context is linked to this CI run.",
+        stage_order=(WorkflowStage.CONTEXT, WorkflowStage.TRIAGE),
+    )
+    orchestrator = RecordingOrchestrator(ci_result)
+    poster = RecordingOutputPoster()
+    worker = Worker(orchestrator=orchestrator, output_poster=poster)
+
+    execution = worker.process(EventJob(event=event, correlation_id=event.meta.correlation_id))
+
+    assert execution.status == WorkerStatus.SUCCEEDED
+    assert execution.result is ci_result
+    assert orchestrator.events == [event]
+    assert poster.payloads == []
 
 
 def test_worker_retries_transient_failure_and_reports_attempt_count() -> None:

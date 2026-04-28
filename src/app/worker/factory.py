@@ -6,8 +6,10 @@ from pathlib import Path
 
 from src.adapters.connectors.github import GitHubAppAuth, GitHubClient
 from src.runtime.orchestrator import (
+    CIWorkflowOrchestrator,
     EventOrchestrator,
     PRWorkflowOrchestrator,
+    ToolRuntimeCIContextProvider,
     ToolRuntimePRCommentPoster,
     ToolRuntimePRContextProvider,
 )
@@ -33,7 +35,8 @@ def build_worker(cfg: AppConfig) -> Worker:
     tool_runtime = _build_github_tool_runtime(client)
     return Worker(
         orchestrator=EventOrchestrator(
-            pr_orchestrator=PRWorkflowOrchestrator(context_provider=ToolRuntimePRContextProvider(tool_runtime))
+            pr_orchestrator=PRWorkflowOrchestrator(context_provider=ToolRuntimePRContextProvider(tool_runtime)),
+            ci_orchestrator=CIWorkflowOrchestrator(context_provider=ToolRuntimeCIContextProvider(tool_runtime)),
         ),
         output_poster=ToolRuntimePRCommentPoster(tool_runtime),
     )
@@ -44,7 +47,12 @@ def _build_github_tool_runtime(client: GitHubClient) -> RegisteredToolRuntime:
         tools=build_github_pr_tools(client),
         policy=StageToolPolicy(
             {
-                WorkflowStage.CONTEXT: ("github.pr.view", "github.pr.files", "github.pr.diff"),
+                WorkflowStage.CONTEXT: (
+                    "github.pr.view",
+                    "github.pr.files",
+                    "github.pr.diff",
+                    "github.actions.run.jobs",
+                ),
                 WorkflowStage.OUTPUT: ("github.pr.comment.create_or_update",),
             }
         ),

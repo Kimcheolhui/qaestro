@@ -28,7 +28,9 @@ from src.core.contracts import (
 )
 from src.runtime.orchestrator import (
     ChatWorkflowOrchestrator,
+    CIWorkflowDepth,
     CIWorkflowOrchestrator,
+    CIWorkflowResult,
     EventOrchestrator,
     PRWorkflowDepth,
     PRWorkflowDraft,
@@ -144,19 +146,88 @@ def test_event_orchestrator_dispatches_pr_events_to_pr_sub_orchestrator():
     assert result.comment_payload.pr_number == 31
 
 
-def test_event_orchestrator_dispatches_ci_and_chat_to_stub_sub_orchestrators():
-    ci_orchestrator = CIWorkflowOrchestrator()
-    chat_orchestrator = ChatWorkflowOrchestrator()
-    orchestrator = EventOrchestrator(
-        ci_orchestrator=ci_orchestrator,
-        chat_orchestrator=chat_orchestrator,
-    )
+def test_event_orchestrator_dispatches_ci_to_ci_sub_orchestrator():
+    event = _ci_completed_event()
+    orchestrator = EventOrchestrator(ci_orchestrator=CIWorkflowOrchestrator())
 
-    with pytest.raises(UnsupportedEventError, match="CI workflow orchestration is planned"):
-        orchestrator.run(_ci_completed_event())
+    result = orchestrator.run(event)
+
+    assert isinstance(result, CIWorkflowResult)
+    assert result.event is event
+    assert result.correlation_id == "corr-ci-001"
+    assert result.depth is CIWorkflowDepth.DEEP
+    assert result.stage_order == (WorkflowStage.CONTEXT, WorkflowStage.TRIAGE)
+    assert result.comment_payload is None
+    assert "pytest" in result.summary
+
+
+def test_event_orchestrator_dispatches_chat_to_stub_sub_orchestrator():
+    chat_orchestrator = ChatWorkflowOrchestrator()
+    orchestrator = EventOrchestrator(chat_orchestrator=chat_orchestrator)
 
     with pytest.raises(UnsupportedEventError, match="Chat workflow orchestration is planned"):
         orchestrator.run(_chat_mention_event())
+
+
+def test_ci_workflow_orchestrator_treats_orphan_ci_as_no_output_success() -> None:
+    event = CICompleted(
+        meta=_event_meta("evt-ci-orphan", EventType.CI_COMPLETED, "corr-ci-orphan"),
+        repo_full_name="Kimcheolhui/qaestro",
+        pr_number=None,
+        commit_sha="def456",
+        workflow_name="Tests",
+        conclusion="failure",
+        run_url="https://github.com/Kimcheolhui/qaestro/actions/runs/2",
+        failed_jobs=("pytest",),
+    )
+
+    result = CIWorkflowOrchestrator().run(event)
+
+    assert isinstance(result, CIWorkflowResult)
+    assert result.depth is CIWorkflowDepth.ORPHAN
+    assert result.comment_payload is None
+    assert result.stage_order == (WorkflowStage.CONTEXT, WorkflowStage.TRIAGE)
+    assert "No pull request context" in result.summary
+
+
+def test_ci_workflow_orchestrator_skips_context_provider_for_orphan_ci() -> None:
+    event = CICompleted(
+        meta=_event_meta("evt-ci-orphan-context", EventType.CI_COMPLETED, "corr-ci-orphan-context"),
+        repo_full_name="Kimcheolhui/qaestro",
+        pr_number=None,
+        commit_sha="def456",
+        workflow_name="Tests",
+        conclusion="failure",
+        run_url="https://github.com/Kimcheolhui/qaestro/actions/runs/2",
+        run_id=2,
+    )
+
+    class FailingCIContextProvider:
+        def load(self, event: CICompleted) -> CICompleted:
+            raise AssertionError("orphan CI should not load GitHub Actions jobs")
+
+    result = CIWorkflowOrchestrator(context_provider=FailingCIContextProvider()).run(event)
+
+    assert result.depth is CIWorkflowDepth.ORPHAN
+    assert result.comment_payload is None
+
+
+def test_ci_workflow_orchestrator_keeps_ci_success_lightweight() -> None:
+    event = CICompleted(
+        meta=_event_meta("evt-ci-success", EventType.CI_COMPLETED, "corr-ci-success"),
+        repo_full_name="Kimcheolhui/qaestro",
+        pr_number=31,
+        commit_sha="def456",
+        workflow_name="Tests",
+        conclusion="success",
+        run_url="https://github.com/Kimcheolhui/qaestro/actions/runs/3",
+    )
+
+    result = CIWorkflowOrchestrator().run(event)
+
+    assert result.depth is CIWorkflowDepth.LIGHTWEIGHT
+    assert result.comment_payload is None
+    assert "CI completed with success" in result.summary
 
 
 def test_event_orchestrator_routes_pr_comment_and_review_events_to_explicit_stubs():

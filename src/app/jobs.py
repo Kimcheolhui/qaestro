@@ -322,6 +322,7 @@ def _event_from_payload(data: Mapping[str, Any]) -> Event:
             run_url=_require_str(data.get("run_url"), "run_url"),
             failed_jobs=_str_tuple(data.get("failed_jobs", ()), "failed_jobs"),
             logs_url=_require_str(data.get("logs_url", ""), "logs_url"),
+            run_id=_optional_int(data.get("run_id"), "run_id"),
         )
     if kind is EventType.CHAT_MENTION:
         return ChatMention(

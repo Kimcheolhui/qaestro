@@ -7,13 +7,13 @@ re-exports the public orchestration entrypoints and contracts.
 from __future__ import annotations
 
 from .chat_workflow import ChatWorkflowOrchestrator
-from .ci_workflow import CIWorkflowOrchestrator
+from .ci_workflow import CIContextProvider, CIWorkflowDepth, CIWorkflowOrchestrator, CIWorkflowResult
 from .dispatcher import EventOrchestrator
 from .pr_context import EventPRContextProvider, PRContextProvider
 from .pr_event_stubs import PRCommentWorkflowOrchestrator, PRReviewWorkflowOrchestrator
 from .pr_triage import PRWorkflowDepth, PRWorkflowTriage, RuleBasedPRWorkflowTriageClassifier
 from .pr_workflow import PRWorkflowOrchestrator, StubPRRuntimeValidator
-from .tool_context import ToolRuntimePRContextProvider
+from .tool_context import ToolRuntimeCIContextProvider, ToolRuntimePRContextProvider
 from .tool_output import ToolRuntimePRCommentPoster
 from .types import (
     PRBehaviourAnalyzer,
@@ -28,7 +28,10 @@ from .types import (
 )
 
 __all__ = [
+    "CIContextProvider",
+    "CIWorkflowDepth",
     "CIWorkflowOrchestrator",
+    "CIWorkflowResult",
     "ChatWorkflowOrchestrator",
     "EventOrchestrator",
     "EventPRContextProvider",
@@ -48,6 +51,7 @@ __all__ = [
     "RuleBasedPRWorkflowTriageClassifier",
     "ShouldValidate",
     "StubPRRuntimeValidator",
+    "ToolRuntimeCIContextProvider",
     "ToolRuntimePRCommentPoster",
     "ToolRuntimePRContextProvider",
     "UnsupportedEventError",

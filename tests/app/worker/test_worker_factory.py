@@ -6,7 +6,13 @@ from pathlib import Path
 
 from src.app.worker.factory import build_worker
 from src.app.worker.runner import NoopOutputPoster
-from src.runtime.orchestrator import EventOrchestrator, ToolRuntimePRCommentPoster, ToolRuntimePRContextProvider
+from src.runtime.orchestrator import (
+    CIWorkflowOrchestrator,
+    EventOrchestrator,
+    ToolRuntimeCIContextProvider,
+    ToolRuntimePRCommentPoster,
+    ToolRuntimePRContextProvider,
+)
 from src.shared.config import AppConfig
 
 
@@ -79,5 +85,8 @@ def test_build_worker_wires_github_tool_runtime_for_durable_queue(tmp_path: Path
     orchestrator = _orchestrator(worker)
     assert isinstance(orchestrator, EventOrchestrator)
     pr_orchestrator = orchestrator._pr_orchestrator
+    ci_orchestrator = orchestrator._ci_orchestrator
     assert isinstance(pr_orchestrator._context_provider, ToolRuntimePRContextProvider)
+    assert isinstance(ci_orchestrator, CIWorkflowOrchestrator)
+    assert isinstance(ci_orchestrator._context_provider, ToolRuntimeCIContextProvider)
     assert isinstance(_output_poster(worker), ToolRuntimePRCommentPoster)

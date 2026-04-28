@@ -45,3 +45,12 @@ class CommentResult:
     id: int
     html_url: str
     body: str = ""
+
+
+@dataclass(frozen=True)
+class ActionsJobResult:
+    """Result summary for one GitHub Actions job in a workflow run."""
+
+    name: str
+    conclusion: str
+    html_url: str

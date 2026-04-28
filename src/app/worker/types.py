@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from enum import Enum, unique
 from typing import Any
 
-from src.runtime.orchestrator import PRWorkflowResult
+from src.runtime.orchestrator import CIWorkflowResult, PRWorkflowResult
 
 
 @unique
@@ -40,5 +40,5 @@ class WorkerExecution:
     correlation_id: str
     status: WorkerStatus
     attempts: int
-    result: PRWorkflowResult | None = None
+    result: PRWorkflowResult | CIWorkflowResult | None = None
     error: str = ""
