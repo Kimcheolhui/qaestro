@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -122,8 +123,11 @@ def _contains_deep_signal(context: PRAnalysisContext) -> bool:
     haystacks = [context.title, context.body, context.unified_diff]
     haystacks.extend(file.path for file in context.files)
     haystacks.extend(file.patch or "" for file in context.files)
-    lowered = "\n".join(haystacks).lower()
-    return any(token in lowered for token in _DEEP_SIGNAL_TOKENS)
+    # Temporary seam hygiene only: match whole path/text tokens so short signals
+    # like "api" and "auth" do not fire on unrelated words such as "capital"
+    # or "author". This is not a permanent programmatic PR-depth classifier.
+    observed_tokens = set(re.split(r"[^a-z0-9]+", "\n".join(haystacks).lower()))
+    return any(token in observed_tokens for token in _DEEP_SIGNAL_TOKENS)
 
 
 def _is_low_signal_file(path: str) -> bool:

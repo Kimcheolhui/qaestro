@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from src.core.contracts import QAReport
 
 if TYPE_CHECKING:
-    from src.runtime.orchestrator.pr_triage import PRWorkflowTriage
+    from src.runtime.orchestrator.pr_triage import PRWorkflowDepth, PRWorkflowTriage
 
 
 @dataclass(frozen=True)
@@ -44,7 +44,7 @@ class GitHubPRCommentRenderer:
                 f"Repository: `{report.repo_full_name}`",
                 f"Pull request: `#{report.pr_number}`",
                 f"Event: `{report.event_id}`",
-                f"Overall risk: **{report.impact.overall_risk.value.upper()}**",
+                f"Overall risk: **{_overall_risk_label(report, triage)}**",
                 *_triage_lines(triage),
                 "",
                 "### Change Summary",
@@ -83,8 +83,22 @@ def _triage_lines(triage: PRWorkflowTriage | None) -> list[str]:
     return [
         f"Workflow depth: **{triage.depth.value.upper()}**",
         f"Triage rationale: {triage.rationale}",
-        f"Allowed stages after triage: `{allowed}`",
+        f"Triaged analysis/validation stages: `{allowed}`",
     ]
+
+
+def _overall_risk_label(report: QAReport, triage: PRWorkflowTriage | None) -> str:
+    if triage is not None and _is_triage_only_depth(triage.depth):
+        return "NOT ASSESSED"
+    return report.impact.overall_risk.value.upper()
+
+
+def _is_triage_only_depth(depth: PRWorkflowDepth) -> bool:
+    # Import only when needed to avoid a runtime import cycle between renderer
+    # and orchestrator modules.
+    from src.runtime.orchestrator.pr_triage import PRWorkflowDepth
+
+    return depth in {PRWorkflowDepth.NOOP, PRWorkflowDepth.LIGHTWEIGHT}
 
 
 def _diff_stat_lines(report: QAReport) -> list[str]:

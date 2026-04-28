@@ -14,6 +14,8 @@ from src.core.contracts import (
     ValidationOutcome,
     ValidationResult,
 )
+from src.runtime.orchestrator import PRWorkflowDepth, PRWorkflowTriage
+from src.runtime.stages import WorkflowStage
 
 
 def _qa_report() -> QAReport:
@@ -105,3 +107,47 @@ def test_github_pr_comment_renderer_does_not_require_validation_results():
 
     assert "Validation not executed in this step" in payload.body
     assert payload.pr_number == 31
+
+
+def test_github_pr_comment_renderer_marks_triage_only_risk_as_not_assessed() -> None:
+    triage = PRWorkflowTriage(
+        depth=PRWorkflowDepth.LIGHTWEIGHT,
+        rationale="Small documentation update; full analysis was skipped.",
+        allowed_stages=(),
+    )
+    report = _qa_report()
+    report = QAReport(
+        event_id=report.event_id,
+        repo_full_name=report.repo_full_name,
+        pr_number=report.pr_number,
+        impact=BehaviourImpact(
+            summary=triage.rationale,
+            areas=(),
+            overall_risk=RiskLevel.LOW,
+            raw_diff_stats=report.impact.raw_diff_stats,
+        ),
+        strategy=StrategyResult(actions=(), reasoning=triage.rationale, confidence=0.0),
+        validations=(),
+        summary_markdown="Triage-only summary.",
+    )
+
+    payload = GitHubPRCommentRenderer().render(report, correlation_id="corr-triage", triage=triage)
+
+    assert "Overall risk: **NOT ASSESSED**" in payload.body
+    assert "Overall risk: **LOW**" not in payload.body
+    assert "Triaged analysis/validation stages: `none`" in payload.body
+    assert "Allowed stages after triage" not in payload.body
+
+
+def test_github_pr_comment_renderer_lists_triaged_execution_stages_precisely() -> None:
+    triage = PRWorkflowTriage(
+        depth=PRWorkflowDepth.DEEP,
+        rationale="High-impact change signals require full analysis and validation.",
+        allowed_stages=(WorkflowStage.ANALYZER, WorkflowStage.STRATEGY, WorkflowStage.VALIDATOR),
+    )
+
+    payload = GitHubPRCommentRenderer().render(_qa_report(), correlation_id="corr-deep", triage=triage)
+
+    assert "Overall risk: **MEDIUM**" in payload.body
+    assert "Triaged analysis/validation stages: `analyzer, strategy, validator`" in payload.body
+    assert "Allowed stages after triage" not in payload.body

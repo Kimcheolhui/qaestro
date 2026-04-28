@@ -65,7 +65,7 @@ class PRWorkflowOrchestrator:
         stages.append(WorkflowStage.TRIAGE)
         triage = self._triage_classifier.classify(context)
 
-        if triage.depth is PRWorkflowDepth.NOOP:
+        if not triage.renders_output:
             report = _triage_only_report(event, context, triage)
             return PRWorkflowResult(
                 event=event,
@@ -175,9 +175,12 @@ class _CallableTriageClassifier:
 def _as_triage_classifier(
     classifier: PRTriageClassifier | Callable[[PRAnalysisContext], PRWorkflowTriage],
 ) -> PRTriageClassifier:
-    if hasattr(classifier, "classify"):
+    classify = getattr(classifier, "classify", None)
+    if callable(classify):
         return cast(PRTriageClassifier, classifier)
-    return _CallableTriageClassifier(classifier)
+    if callable(classifier):
+        return _CallableTriageClassifier(classifier)
+    raise TypeError("triage_classifier must be callable or expose a callable classify(context) method")
 
 
 def _triage_only_report(event: PREvent, context: PRAnalysisContext, triage: PRWorkflowTriage) -> QAReport:
