@@ -26,7 +26,7 @@ from urllib.parse import quote, urlencode
 from .auth import GitHubAppAuth
 from .errors import AuthError, GitHubError, NotFoundError, RateLimitError
 from .transport import HTTPResponse, HTTPTransport, UrllibTransport
-from .types import CommentResult, FileDiff, PRMeta
+from .types import ActionsJobResult, CommentResult, FileDiff, PRMeta
 
 # Page size for listing endpoints. Max allowed by GitHub is 100.
 _DEFAULT_PER_PAGE = 100
@@ -187,6 +187,37 @@ class GitHubClient:
             raise GitHubError("unexpected update-comment payload shape")
         return _comment_result_from_payload(data)
 
+    def list_workflow_run_jobs(
+        self,
+        owner: str,
+        repo: str,
+        run_id: int,
+        *,
+        per_page: int = _DEFAULT_PER_PAGE,
+    ) -> list[ActionsJobResult]:
+        """List GitHub Actions jobs for a workflow run, walking pagination eagerly."""
+        if run_id <= 0:
+            raise ValueError("run_id must be a positive integer")
+        if not 1 <= per_page <= 100:
+            raise ValueError("per_page must be between 1 and 100")
+
+        results: list[ActionsJobResult] = []
+        for page in range(1, _MAX_PAGES + 1):
+            query = urlencode({"per_page": per_page, "page": page})
+            path = f"/repos/{_segment(owner)}/{_segment(repo)}/actions/runs/{run_id}/jobs?{query}"
+            resp = self._request("GET", path)
+            page_data = resp.json()
+            if not isinstance(page_data, dict) or not isinstance(page_data.get("jobs"), list):
+                raise GitHubError("unexpected workflow-run jobs payload shape")
+            jobs = page_data["jobs"]
+            for item in jobs:
+                if not isinstance(item, dict):
+                    raise GitHubError("unexpected workflow-run jobs payload shape")
+                results.append(_actions_job_from_payload(item))
+            if len(jobs) < per_page:
+                break
+        return results
+
     # ── Internal ──────────────────────────────────────────────────────
 
     def _request(
@@ -295,4 +326,12 @@ def _file_diff_from_payload(data: dict[str, Any]) -> FileDiff:
         changes=int(data.get("changes", 0)),
         patch=str(patch) if isinstance(patch, str) else None,
         previous_filename=str(data.get("previous_filename", "") or ""),
+    )
+
+
+def _actions_job_from_payload(data: dict[str, Any]) -> ActionsJobResult:
+    return ActionsJobResult(
+        name=str(data.get("name", "")),
+        conclusion=str(data.get("conclusion", "") or ""),
+        html_url=str(data.get("html_url", "")),
     )

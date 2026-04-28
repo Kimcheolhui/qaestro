@@ -168,6 +168,7 @@ def parse_github_ci_event(
         run_url=wf.get("html_url", ""),
         failed_jobs=tuple(failed_jobs),
         logs_url=wf.get("logs_url", ""),
+        run_id=int(wf["id"]) if wf.get("id") is not None else None,
     )
 
 

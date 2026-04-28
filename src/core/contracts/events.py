@@ -147,6 +147,7 @@ class CICompleted:
     run_url: str
     failed_jobs: tuple[str, ...] = ()
     logs_url: str = ""
+    run_id: int | None = None
 
 
 @dataclass(frozen=True)

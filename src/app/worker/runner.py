@@ -10,7 +10,7 @@ from typing import Protocol
 
 from src.adapters.renderers import PRCommentPayload
 from src.core.contracts import Event
-from src.runtime.orchestrator import EventOrchestrator, PRWorkflowResult
+from src.runtime.orchestrator import CIWorkflowResult, EventOrchestrator, PRWorkflowResult
 from src.shared import get_logger
 
 from ..jobs import EventJob, JobQueue, MalformedEventJob, QueuedJob
@@ -22,7 +22,7 @@ logger = get_logger(__name__)
 class Orchestrator(Protocol):
     """Minimal orchestrator surface required by the worker."""
 
-    def run(self, event: Event) -> PRWorkflowResult: ...
+    def run(self, event: Event) -> PRWorkflowResult | CIWorkflowResult: ...
 
 
 class OutputPoster(Protocol):
@@ -155,7 +155,7 @@ class Worker:
             },
         )
 
-    def _run_once(self, job: EventJob, context: WorkerExecutionContext) -> PRWorkflowResult:
+    def _run_once(self, job: EventJob, context: WorkerExecutionContext) -> PRWorkflowResult | CIWorkflowResult:
         if context.timeout_seconds is not None:
             # Timeout currently guards orchestrator execution. Posting remains
             # synchronous so the Step 2 worker has a real timeout failure state
@@ -169,7 +169,7 @@ class Worker:
             return result
         return self._run_pipeline(job, context)
 
-    def _run_pipeline(self, job: EventJob, context: WorkerExecutionContext) -> PRWorkflowResult:
+    def _run_pipeline(self, job: EventJob, context: WorkerExecutionContext) -> PRWorkflowResult | CIWorkflowResult:
         # ``context`` is built here so Step 2 fixes the extension seam for
         # Agent Framework integration, even though no runner is invoked until
         # later milestones.
@@ -180,7 +180,9 @@ class Worker:
         return result
 
 
-def _run_with_timeout(operation: Callable[[], PRWorkflowResult], *, timeout_seconds: float) -> PRWorkflowResult:
+def _run_with_timeout(
+    operation: Callable[[], PRWorkflowResult | CIWorkflowResult], *, timeout_seconds: float
+) -> PRWorkflowResult | CIWorkflowResult:
     """Run one worker attempt with a basic timeout guard.
 
     This deliberately uses a one-shot executor instead of durable cancellation.

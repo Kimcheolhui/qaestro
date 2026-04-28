@@ -321,6 +321,7 @@ class TestCICompleted:
         )
         assert ci.failed_jobs == ()
         assert ci.logs_url == ""
+        assert ci.run_id is None
 
     def test_failure(self):
         ci = CICompleted(
@@ -335,6 +336,19 @@ class TestCICompleted:
         )
         assert ci.pr_number is None
         assert len(ci.failed_jobs) == 2
+
+    def test_run_id_optional_field(self):
+        ci = CICompleted(
+            meta=_make_meta(EventType.CI_COMPLETED),
+            repo_full_name="o/r",
+            pr_number=7,
+            commit_sha="sha",
+            workflow_name="ci",
+            conclusion="failure",
+            run_url="https://example.com/run/99",
+            run_id=99,
+        )
+        assert ci.run_id == 99
 
     def test_frozen(self):
         ci = CICompleted(

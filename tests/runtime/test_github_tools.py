@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.adapters.connectors.github import CommentResult, FileDiff, PRMeta
+from src.adapters.connectors.github import ActionsJobResult, CommentResult, FileDiff, PRMeta
 from src.adapters.renderers import PRCommentPayload
 from src.runtime.orchestrator import ToolRuntimePRCommentPoster
 from src.runtime.stages import WorkflowStage
@@ -46,6 +46,21 @@ class RecordingGitHubClient:
     def get_pull_request_diff(self, owner: str, repo: str, number: int) -> str:
         self.calls.append(("diff", owner, repo, number))
         return "diff --git a/src/app.py b/src/app.py"
+
+    def list_workflow_run_jobs(self, owner: str, repo: str, run_id: int) -> list[ActionsJobResult]:
+        self.calls.append(("actions_jobs", owner, repo, run_id))
+        return [
+            ActionsJobResult(
+                name="tests",
+                conclusion="failure",
+                html_url="https://github.com/octocat/hello-world/actions/runs/99/job/1",
+            ),
+            ActionsJobResult(
+                name="lint",
+                conclusion="success",
+                html_url="https://github.com/octocat/hello-world/actions/runs/99/job/2",
+            ),
+        ]
 
     def create_issue_comment(self, owner: str, repo: str, number: int, body: str) -> CommentResult:
         self.calls.append(("comment", owner, repo, number, body))
@@ -126,6 +141,62 @@ def test_github_pr_read_tools_call_client_and_return_normalized_outputs() -> Non
         ("files", "octocat", "hello-world", 42),
         ("diff", "octocat", "hello-world", 42),
     ]
+
+
+def test_github_actions_jobs_tool_returns_failed_job_names_through_context_stage() -> None:
+    client = RecordingGitHubClient()
+    runtime = RegisteredToolRuntime(
+        tools=build_github_pr_tools(client),
+        policy=StageToolPolicy(
+            {
+                WorkflowStage.CONTEXT: ("github.actions.run.jobs",),
+            }
+        ),
+    )
+
+    result = runtime.execute(
+        ToolCall(
+            stage=WorkflowStage.CONTEXT,
+            name="github.actions.run.jobs",
+            input={"repo_full_name": "octocat/hello-world", "run_id": 99},
+            correlation_id="corr-ci",
+        )
+    )
+
+    assert result.ok is True
+    assert result.output == (
+        ActionsJobResult(
+            name="tests",
+            conclusion="failure",
+            html_url="https://github.com/octocat/hello-world/actions/runs/99/job/1",
+        ),
+        ActionsJobResult(
+            name="lint",
+            conclusion="success",
+            html_url="https://github.com/octocat/hello-world/actions/runs/99/job/2",
+        ),
+    )
+    assert client.calls == [("actions_jobs", "octocat", "hello-world", 99)]
+
+
+def test_github_actions_jobs_tool_requires_run_id() -> None:
+    client = RecordingGitHubClient()
+    runtime = RegisteredToolRuntime(
+        tools=build_github_pr_tools(client),
+        policy=StageToolPolicy({WorkflowStage.CONTEXT: ("github.actions.run.jobs",)}),
+    )
+
+    result = runtime.execute(
+        ToolCall(
+            stage=WorkflowStage.CONTEXT,
+            name="github.actions.run.jobs",
+            input={"repo_full_name": "octocat/hello-world"},
+            correlation_id="corr-ci",
+        )
+    )
+
+    assert result.ok is False
+    assert "run_id is required" in result.error
 
 
 def test_github_pr_comment_tool_posts_rendered_body() -> None:

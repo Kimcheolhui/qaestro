@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from src.adapters.connectors.github import CommentResult, FileDiff, PRMeta
+from src.adapters.connectors.github import ActionsJobResult, CommentResult, FileDiff, PRMeta
 
 from . import ToolCall, ToolCapability, ToolDefinition
 
@@ -17,6 +17,8 @@ class GitHubPRToolClient(Protocol):
     def list_pull_request_files(self, owner: str, repo: str, number: int) -> list[FileDiff]: ...
 
     def get_pull_request_diff(self, owner: str, repo: str, number: int) -> str: ...
+
+    def list_workflow_run_jobs(self, owner: str, repo: str, run_id: int) -> list[ActionsJobResult]: ...
 
     def create_issue_comment(self, owner: str, repo: str, number: int, body: str) -> CommentResult: ...
 
@@ -44,6 +46,11 @@ def build_github_pr_tools(client: GitHubPRToolClient) -> tuple[ToolDefinition, .
             handler=lambda call: _get_pull_request_diff(client, call),
         ),
         ToolDefinition(
+            name="github.actions.run.jobs",
+            capabilities=(ToolCapability.READ,),
+            handler=lambda call: _list_workflow_run_jobs(client, call),
+        ),
+        ToolDefinition(
             name="github.pr.comment.create_or_update",
             capabilities=(ToolCapability.WRITE,),
             handler=lambda call: _create_or_update_comment(client, call),
@@ -66,6 +73,20 @@ def _get_pull_request_diff(client: GitHubPRToolClient, call: ToolCall) -> str:
     return client.get_pull_request_diff(owner, repo, pr_number)
 
 
+def _list_workflow_run_jobs(client: GitHubPRToolClient, call: ToolCall) -> tuple[ActionsJobResult, ...]:
+    owner, repo = _repo_input(call)
+    raw_run_id = call.input.get("run_id")
+    if raw_run_id is None or raw_run_id == "":
+        raise ValueError("run_id is required and must be a positive integer")
+    try:
+        run_id = int(raw_run_id)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("run_id must be a positive integer") from exc
+    if run_id <= 0:
+        raise ValueError("run_id must be greater than 0")
+    return tuple(client.list_workflow_run_jobs(owner, repo, run_id))
+
+
 def _create_or_update_comment(client: GitHubPRToolClient, call: ToolCall) -> CommentResult:
     owner, repo, pr_number = _repo_pr_input(call)
     body = str(call.input.get("body", ""))
@@ -83,6 +104,11 @@ def _persisted_comment_body(body: str, marker: str) -> str:
     if not body:
         return marker
     return f"{marker}\n\n{body}"
+
+
+def _repo_input(call: ToolCall) -> tuple[str, str]:
+    repo_full_name = str(call.input.get("repo_full_name", ""))
+    return _split_repo(repo_full_name)
 
 
 def _repo_pr_input(call: ToolCall) -> tuple[str, str, int]:
