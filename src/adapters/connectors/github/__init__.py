@@ -19,12 +19,13 @@ from .auth import Clock, GitHubAppAuth, SystemClock
 from .client import GitHubClient
 from .errors import AuthError, GitHubError, NotFoundError, RateLimitError
 from .transport import FakeResponse, FakeTransport, HTTPResponse, HTTPTransport, UrllibTransport
-from .types import ActionsJobResult, CommentResult, FileDiff, PRMeta
+from .types import ActionsJobResult, CheckRunResult, CommentResult, FileDiff, PRMeta
 from .webhook import verify_signature
 
 __all__ = [
     "ActionsJobResult",
     "AuthError",
+    "CheckRunResult",
     "Clock",
     "CommentResult",
     "FakeResponse",

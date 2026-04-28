@@ -3,13 +3,42 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import overload
+from typing import Protocol, overload
 
-from src.adapters.connectors.github import ActionsJobResult, FileDiff, PRMeta
+from src.adapters.connectors.github import ActionsJobResult, CheckRunResult, FileDiff, PRMeta
 from src.core.analyzer import PRAnalysisContext, PRFileDiff, PRFileStatus
 from src.core.contracts import CICompleted, PREvent
 from src.runtime.stages import WorkflowStage
 from src.runtime.tools import ToolCall, ToolResult, ToolRuntime
+
+from .pr_aggregate import CheckRunSnapshot
+
+
+class PRCheckSnapshotProvider(Protocol):
+    """Loads current-head check snapshots for review readiness decisions."""
+
+    def load(self, *, repo_full_name: str, head_sha: str, correlation_id: str) -> tuple[CheckRunSnapshot, ...]: ...
+
+
+class ToolRuntimePRCheckSnapshotProvider:
+    """Collect current-head check runs through stage-approved GitHub read tools."""
+
+    def __init__(self, runtime: ToolRuntime) -> None:
+        self._runtime = runtime
+
+    def load(self, *, repo_full_name: str, head_sha: str, correlation_id: str) -> tuple[CheckRunSnapshot, ...]:
+        result = self._runtime.execute(
+            ToolCall(
+                stage=WorkflowStage.CONTEXT,
+                name="github.checks.runs_for_ref",
+                input={"repo_full_name": repo_full_name, "ref": head_sha},
+                correlation_id=correlation_id,
+            )
+        )
+        if not result.ok:
+            raise RuntimeError(result.error or "github.checks.runs_for_ref failed")
+        checks = _expect_check_run_tuple(result.output)
+        return tuple(CheckRunSnapshot.from_result(check) for check in checks)
 
 
 class ToolRuntimePRContextProvider:
@@ -121,6 +150,12 @@ def _expect_file_tuple(output: object) -> tuple[FileDiff, ...]:
 def _expect_actions_job_tuple(output: object) -> tuple[ActionsJobResult, ...]:
     if not isinstance(output, tuple) or not all(isinstance(item, ActionsJobResult) for item in output):
         raise TypeError("github.actions.run.jobs returned unexpected output type")
+    return output
+
+
+def _expect_check_run_tuple(output: object) -> tuple[CheckRunResult, ...]:
+    if not isinstance(output, tuple) or not all(isinstance(item, CheckRunResult) for item in output):
+        raise TypeError("github.checks.runs_for_ref returned unexpected output type")
     return output
 
 
