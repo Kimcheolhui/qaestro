@@ -22,9 +22,11 @@ class PRWorkflowDepth(StrEnum):
 class PRWorkflowTriage:
     """Audit record describing why a PR uses a given workflow depth.
 
-    Step 3.5 keeps this classifier deterministic as a policy seam. Later Agent
-    Framework integration can replace the classifier while preserving this
-    bounded workflow contract and stage allowlist result.
+    Step 3.5 keeps this classifier deterministic as a temporary policy seam.
+    This must be replaced by Agent Framework + repo knowledge/instruction based
+    classification while preserving this bounded workflow contract and stage
+    allowlist result. Programmatic path/token heuristics are not expected to be
+    the final PR intent/depth decision model.
     """
 
     depth: PRWorkflowDepth
@@ -54,8 +56,8 @@ class RuleBasedPRWorkflowTriageClassifier:
     This is intentionally conservative and portable. It only chooses a
     lightweight path for very small, low-signal documentation/metadata changes,
     escalates obvious high-impact signals to deep, and otherwise preserves the
-    normal Step 3 analysis path. It is a seam for a future prompt/agent- and
-    repo-knowledge-based classifier, not the final workflow judgment model.
+    normal Step 3 analysis path. It is only a temporary seam and must be replaced
+    by Agent Framework + repo-knowledge/instruction based classification.
     """
 
     def classify(self, context: PRAnalysisContext) -> PRWorkflowTriage:
