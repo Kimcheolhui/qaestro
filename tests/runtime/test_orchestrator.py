@@ -30,9 +30,11 @@ from src.runtime.orchestrator import (
     ChatWorkflowOrchestrator,
     CIWorkflowOrchestrator,
     EventOrchestrator,
+    PRWorkflowDepth,
     PRWorkflowDraft,
     PRWorkflowOrchestrator,
     PRWorkflowResult,
+    PRWorkflowTriage,
     UnsupportedEventError,
 )
 from src.runtime.stages import WorkflowStage
@@ -130,11 +132,13 @@ def test_event_orchestrator_dispatches_pr_events_to_pr_sub_orchestrator():
     assert result.correlation_id == "corr-001"
     assert result.stage_order == (
         WorkflowStage.CONTEXT,
+        WorkflowStage.TRIAGE,
         WorkflowStage.ANALYZER,
         WorkflowStage.STRATEGY,
         WorkflowStage.VALIDATOR,
         WorkflowStage.RENDERER,
     )
+    assert result.comment_payload is not None
     assert result.comment_payload.repo_full_name == "Kimcheolhui/qaestro"
     assert result.comment_payload.pr_number == 31
 
@@ -175,6 +179,7 @@ def test_pr_workflow_orchestrator_runs_stub_flow_and_renders_pr_comment_payload(
     assert result.correlation_id == "corr-001"
     assert result.stage_order == (
         WorkflowStage.CONTEXT,
+        WorkflowStage.TRIAGE,
         WorkflowStage.ANALYZER,
         WorkflowStage.STRATEGY,
         WorkflowStage.VALIDATOR,
@@ -183,6 +188,7 @@ def test_pr_workflow_orchestrator_runs_stub_flow_and_renders_pr_comment_payload(
     assert result.impact.summary.startswith("PR #31 (feat: add connector) changes 2 files")
     assert result.strategy.reasoning.startswith("High risk")
     assert len(result.validations) == 3
+    assert result.comment_payload is not None
     assert result.comment_payload.repo_full_name == "Kimcheolhui/qaestro"
     assert result.comment_payload.pr_number == 31
     assert "feat: add connector" in result.comment_payload.body
@@ -210,24 +216,117 @@ def test_pr_workflow_orchestrator_passes_draft_to_injected_renderer():
     assert len(renderer.calls) == 1
     assert renderer.calls[0].event is result.event
     assert renderer.calls[0].report == result.report
+    assert renderer.calls[0].triage == result.triage
     assert renderer.calls[0].correlation_id == result.correlation_id
     assert not hasattr(renderer.calls[0], "comment_payload")
+    assert result.comment_payload is not None
     assert result.comment_payload.body == "custom renderer output"
 
 
 def test_pr_workflow_orchestrator_can_skip_validation_via_policy_hook():
-    orchestrator = PRWorkflowOrchestrator(should_validate=lambda event, impact, strategy: False)
+    normal_triage = PRWorkflowTriage(
+        depth=PRWorkflowDepth.NORMAL,
+        rationale="Normal analysis can still skip validation by policy.",
+        allowed_stages=(WorkflowStage.ANALYZER, WorkflowStage.STRATEGY, WorkflowStage.VALIDATOR),
+    )
+    orchestrator = PRWorkflowOrchestrator(
+        triage_classifier=lambda context: normal_triage,
+        should_validate=lambda event, impact, strategy: False,
+    )
 
     result = orchestrator.run(_pr_opened_event())
 
     assert result.validations == ()
     assert result.stage_order == (
         WorkflowStage.CONTEXT,
+        WorkflowStage.TRIAGE,
         WorkflowStage.ANALYZER,
         WorkflowStage.STRATEGY,
         WorkflowStage.RENDERER,
     )
+    assert result.comment_payload is not None
     assert "Validation not executed" in result.comment_payload.body
+
+
+def test_pr_workflow_orchestrator_can_emit_lightweight_triage_output_without_full_analysis() -> None:
+    event = PROpened(
+        meta=_event_meta("evt-docs", EventType.PR_OPENED, "corr-docs"),
+        repo_full_name="Kimcheolhui/qaestro",
+        pr_number=43,
+        title="docs: update contributor guide",
+        body="Clarifies wording only.",
+        author="Kimcheolhui",
+        base_branch="main",
+        head_branch="docs/contributor-guide",
+        diff_url="https://github.com/Kimcheolhui/qaestro/pull/43.diff",
+        files_changed=(FileChange(path="docs/CONTRIBUTING.md", status="modified", additions=3, deletions=1),),
+    )
+
+    orchestrator = PRWorkflowOrchestrator()
+    result = orchestrator.run(event)
+
+    assert result.triage.depth is PRWorkflowDepth.LIGHTWEIGHT
+    assert result.stage_order == (WorkflowStage.CONTEXT, WorkflowStage.TRIAGE, WorkflowStage.RENDERER)
+    assert result.impact.areas == ()
+    assert result.strategy.actions == ()
+    assert result.validations == ()
+    assert result.comment_payload is not None
+    assert "Workflow depth: **LIGHTWEIGHT**" in result.comment_payload.body
+    assert "full analysis was skipped" in result.comment_payload.body
+    assert "docs/CONTRIBUTING.md" in result.comment_payload.body
+
+
+def test_pr_workflow_orchestrator_uses_deep_triage_to_force_validation() -> None:
+    class RecordingValidator:
+        def __init__(self) -> None:
+            self.calls: list[StrategyResult] = []
+
+        def validate(self, strategy: StrategyResult) -> tuple[ValidationResult, ...]:
+            self.calls.append(strategy)
+            return ()
+
+    validator = RecordingValidator()
+    triage = PRWorkflowTriage(
+        depth=PRWorkflowDepth.DEEP,
+        rationale="High-impact security runbook change requires deep validation.",
+        allowed_stages=(WorkflowStage.ANALYZER, WorkflowStage.STRATEGY, WorkflowStage.VALIDATOR),
+    )
+    orchestrator = PRWorkflowOrchestrator(
+        triage_classifier=lambda context: triage,
+        should_validate=lambda event, impact, strategy: False,
+        validator=validator,
+    )
+
+    result = orchestrator.run(_pr_opened_event())
+
+    assert result.triage == triage
+    assert validator.calls == [result.strategy]
+    assert result.stage_order == (
+        WorkflowStage.CONTEXT,
+        WorkflowStage.TRIAGE,
+        WorkflowStage.ANALYZER,
+        WorkflowStage.STRATEGY,
+        WorkflowStage.VALIDATOR,
+        WorkflowStage.RENDERER,
+    )
+    assert result.comment_payload is not None
+    assert "Workflow depth: **DEEP**" in result.comment_payload.body
+
+
+def test_pr_workflow_orchestrator_can_return_noop_triage_result() -> None:
+    triage = PRWorkflowTriage(
+        depth=PRWorkflowDepth.NOOP,
+        rationale="Generated metadata change does not need qaestro analysis.",
+        allowed_stages=(),
+    )
+    orchestrator = PRWorkflowOrchestrator(triage_classifier=lambda context: triage)
+
+    result = orchestrator.run(_pr_opened_event())
+
+    assert result.triage == triage
+    assert result.stage_order == (WorkflowStage.CONTEXT, WorkflowStage.TRIAGE)
+    assert result.comment_payload is None
+    assert result.impact.summary == "Generated metadata change does not need qaestro analysis."
 
 
 def test_pr_workflow_orchestrator_accepts_replaceable_components():
@@ -301,6 +400,7 @@ def test_pr_workflow_orchestrator_accepts_replaceable_components():
     assert result.strategy.reasoning == "custom strategy"
     assert result.stage_order == (
         WorkflowStage.CONTEXT,
+        WorkflowStage.TRIAGE,
         WorkflowStage.ANALYZER,
         WorkflowStage.STRATEGY,
         WorkflowStage.VALIDATOR,

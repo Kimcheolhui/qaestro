@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from src.core.contracts import QAReport
+
+if TYPE_CHECKING:
+    from src.runtime.orchestrator.pr_triage import PRWorkflowTriage
 
 
 @dataclass(frozen=True)
@@ -23,7 +27,13 @@ class GitHubPRCommentRenderer:
     risk, choose validation actions, or call GitHub.
     """
 
-    def render(self, report: QAReport, *, correlation_id: str) -> PRCommentPayload:
+    def render(
+        self,
+        report: QAReport,
+        *,
+        correlation_id: str,
+        triage: PRWorkflowTriage | None = None,
+    ) -> PRCommentPayload:
         if report.pr_number is None:
             raise ValueError("PR comment renderer requires report.pr_number")
 
@@ -35,6 +45,7 @@ class GitHubPRCommentRenderer:
                 f"Pull request: `#{report.pr_number}`",
                 f"Event: `{report.event_id}`",
                 f"Overall risk: **{report.impact.overall_risk.value.upper()}**",
+                *_triage_lines(triage),
                 "",
                 "### Change Summary",
                 report.summary_markdown or report.impact.summary,
@@ -63,6 +74,17 @@ class GitHubPRCommentRenderer:
             pr_number=report.pr_number,
             body=body,
         )
+
+
+def _triage_lines(triage: PRWorkflowTriage | None) -> list[str]:
+    if triage is None:
+        return []
+    allowed = ", ".join(stage.value for stage in triage.allowed_stages) or "none"
+    return [
+        f"Workflow depth: **{triage.depth.value.upper()}**",
+        f"Triage rationale: {triage.rationale}",
+        f"Allowed stages after triage: `{allowed}`",
+    ]
 
 
 def _diff_stat_lines(report: QAReport) -> list[str]:
