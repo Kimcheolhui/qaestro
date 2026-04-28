@@ -279,6 +279,43 @@ def test_pr_workflow_orchestrator_can_emit_lightweight_triage_output_without_ful
     assert "full analysis was skipped" in result.comment_payload.body
     assert "docs/CONTRIBUTING.md" in result.comment_payload.body
 
+    assert result.impact.overall_risk is RiskLevel.NOT_ASSESSED
+
+
+def test_rule_based_triage_does_not_default_github_config_or_empty_files_to_lightweight() -> None:
+    workflow_event = PROpened(
+        meta=_event_meta("evt-workflow", EventType.PR_OPENED, "corr-workflow"),
+        repo_full_name="Kimcheolhui/qaestro",
+        pr_number=46,
+        title="ci: update python matrix",
+        body="Updates GitHub Actions CI configuration.",
+        author="Kimcheolhui",
+        base_branch="main",
+        head_branch="ci/python-matrix",
+        diff_url="https://github.com/Kimcheolhui/qaestro/pull/46.diff",
+        files_changed=(FileChange(path=".github/workflows/ci.yml", status="modified", additions=2, deletions=1),),
+    )
+    empty_files_event = PROpened(
+        meta=_event_meta("evt-empty-files", EventType.PR_OPENED, "corr-empty-files"),
+        repo_full_name="Kimcheolhui/qaestro",
+        pr_number=47,
+        title="chore: update metadata",
+        body="File list is unavailable in this event context.",
+        author="Kimcheolhui",
+        base_branch="main",
+        head_branch="chore/metadata",
+        diff_url="https://github.com/Kimcheolhui/qaestro/pull/47.diff",
+        files_changed=(),
+    )
+
+    workflow_result = PRWorkflowOrchestrator().run(workflow_event)
+    empty_files_result = PRWorkflowOrchestrator().run(empty_files_event)
+
+    assert workflow_result.triage.depth is PRWorkflowDepth.NORMAL
+    assert WorkflowStage.ANALYZER in workflow_result.stage_order
+    assert empty_files_result.triage.depth is PRWorkflowDepth.NORMAL
+    assert WorkflowStage.ANALYZER in empty_files_result.stage_order
+
 
 def test_pr_workflow_orchestrator_rejects_classifier_with_non_callable_classify_attribute() -> None:
     class InvalidClassifier:

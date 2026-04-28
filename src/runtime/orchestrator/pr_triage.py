@@ -82,7 +82,7 @@ class RuleBasedPRWorkflowTriageClassifier:
 
 
 _LOW_SIGNAL_ROOT_FILES = {"readme.md", "changelog.md", "license", "notice"}
-_LOW_SIGNAL_DIRS = {"docs", ".github"}
+_LOW_SIGNAL_DIRS = {"docs"}
 _DEEP_SIGNAL_TOKENS = (
     "api",
     "auth",
@@ -102,7 +102,7 @@ _GENERATED_PATH_PARTS = {"generated", "dist", "build"}
 def _is_lightweight_change(context: PRAnalysisContext) -> bool:
     """Return true for tiny low-signal changes safe for summary-only output."""
     if not context.files:
-        return True
+        return False
     changed_lines = sum(file.additions + file.deletions for file in context.files)
     if changed_lines > 30 or len(context.files) > 5:
         return False

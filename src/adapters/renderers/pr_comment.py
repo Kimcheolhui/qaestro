@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from src.core.contracts import QAReport
 
 if TYPE_CHECKING:
-    from src.runtime.orchestrator.pr_triage import PRWorkflowDepth, PRWorkflowTriage
+    from src.runtime.orchestrator.pr_triage import PRWorkflowTriage
 
 
 @dataclass(frozen=True)
@@ -88,17 +88,8 @@ def _triage_lines(triage: PRWorkflowTriage | None) -> list[str]:
 
 
 def _overall_risk_label(report: QAReport, triage: PRWorkflowTriage | None) -> str:
-    if triage is not None and _is_triage_only_depth(triage.depth):
-        return "NOT ASSESSED"
-    return report.impact.overall_risk.value.upper()
-
-
-def _is_triage_only_depth(depth: PRWorkflowDepth) -> bool:
-    # Import only when needed to avoid a runtime import cycle between renderer
-    # and orchestrator modules.
-    from src.runtime.orchestrator.pr_triage import PRWorkflowDepth
-
-    return depth in {PRWorkflowDepth.NOOP, PRWorkflowDepth.LIGHTWEIGHT}
+    del triage
+    return report.impact.overall_risk.value.replace("_", " ").upper()
 
 
 def _diff_stat_lines(report: QAReport) -> list[str]:

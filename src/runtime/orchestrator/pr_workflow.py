@@ -188,10 +188,7 @@ def _triage_only_report(event: PREvent, context: PRAnalysisContext, triage: PRWo
     impact = BehaviourImpact(
         summary=triage.rationale,
         areas=(),
-        # Stub-only neutral risk: lightweight/no-op triage intentionally avoids
-        # full behaviour risk evaluation, so this must not be read as a real
-        # risk decision for the PR.
-        overall_risk=RiskLevel.LOW,
+        overall_risk=RiskLevel.NOT_ASSESSED,
         raw_diff_stats={
             "files_changed": len(context.files),
             "additions": sum(file.additions for file in context.files),

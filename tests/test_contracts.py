@@ -412,13 +412,14 @@ class TestRiskLevel:
     """RiskLevel enum."""
 
     def test_values(self):
+        assert RiskLevel.NOT_ASSESSED.value == "not_assessed"
         assert RiskLevel.LOW.value == "low"
         assert RiskLevel.MEDIUM.value == "medium"
         assert RiskLevel.HIGH.value == "high"
         assert RiskLevel.CRITICAL.value == "critical"
 
     def test_member_count(self):
-        assert len(RiskLevel) == 4
+        assert len(RiskLevel) == 5
 
 
 class TestActionType:

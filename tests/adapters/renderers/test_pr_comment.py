@@ -123,7 +123,7 @@ def test_github_pr_comment_renderer_marks_triage_only_risk_as_not_assessed() -> 
         impact=BehaviourImpact(
             summary=triage.rationale,
             areas=(),
-            overall_risk=RiskLevel.LOW,
+            overall_risk=RiskLevel.NOT_ASSESSED,
             raw_diff_stats=report.impact.raw_diff_stats,
         ),
         strategy=StrategyResult(actions=(), reasoning=triage.rationale, confidence=0.0),

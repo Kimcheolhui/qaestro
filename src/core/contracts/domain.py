@@ -14,6 +14,7 @@ from enum import Enum, unique
 class RiskLevel(Enum):
     """Risk classification for a code change."""
 
+    NOT_ASSESSED = "not_assessed"
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
