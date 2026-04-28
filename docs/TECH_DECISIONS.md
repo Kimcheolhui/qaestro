@@ -50,13 +50,23 @@ qaestro의 autonomy model은 완전 자율 agent가 아니라, **bounded tool au
 
 Step 3.5의 ToolRuntime 전환은 이 방향을 코드 경계로 고정하기 위한 중간 단계다. 외부 webhook input event는 계속 gateway가 normalized event로 변환하며, tool call로 대체하지 않는다. GitHub backend도 당분간 기존 GitHub Client API adapter를 유지한다. 이번 결정의 핵심은 API transport를 CLI로 바꾸는 것이 아니라, `Worker`/workflow가 `GitHubClient`, PR context provider, comment poster 같은 concrete read/write dependency를 직접 들고 있지 않도록 narrow tool capability 뒤로 이동시키는 것이다. Agent Framework runner가 들어오기 전까지 tool 선택은 deterministic sequence로 구현해도 되지만, 모든 read/write는 같은 `ToolRuntime` contract와 stage allowlist를 통과해야 한다.
 
-### 5. 모델 제공 방식: BYOK
+### 5. PR review lifecycle: deferred unified review + manual trigger first
+
+qaestro는 PR opened, PR synchronize, workflow_run completed, GitHub comment/review, ChatOps mention을 별도 이벤트로 수신하되, 판단과 출력은 PR 단위 aggregate state에서 종합한다. 권장 MVP는 manual-trigger first다. 사용자가 PR 또는 channel에서 `@qaestro review`처럼 명시적으로 요청하면 current PR aggregate를 만들고, current `head_sha` 기준 CI/check snapshot을 확인한 뒤 가능한 경우 unified review를 수행한다. 자동 리뷰는 이후 repo 설정으로 opt-in/optional하게 확장한다.
+
+공식 final review는 관련 CI/check가 완료된 뒤 내는 것을 기본으로 한다. `workflow_run completed` 이벤트 하나는 한 workflow가 끝났다는 신호일 뿐이므로, final review readiness는 current head의 check runs/workflow runs를 다시 조회해 pending/queued/in-progress 항목이 남았는지 확인해야 한다. 5~10분 대기는 정상 범위로 보고, 장시간 pending은 timeout 후 partial review로 표시한다. 사용자가 직접 호출한 경우에는 조용히 기다리지 말고 현재 상태 기준의 interim response를 즉시 제공하되, 남은 workflow/check와 최종 판단 보류를 명시한다.
+
+PR aggregate는 PR 전체 수명과 대화 history를 유지하고, 그 안에 `PRRevisionState(head_sha)`와 `ReviewRun`을 여러 개 둔다. 새 commit은 새 revision을 만들며 이전 revision의 분석/CI는 stale로 표시한다. 이전 결과는 “같은 실패가 반복되는가”, “이전 finding이 해소됐는가” 같은 historical evidence로 참고할 수 있지만, current verdict의 source of truth는 current head diff와 current head CI/check 결과다.
+
+출력은 세 가지 surface로 구분한다. PR-level managed summary comment는 qaestro의 대표 리포트로 create/update되고, CI/check 요약과 주요 finding을 포함한다. GitHub review/inline comment는 final unified review 시점에 file/line/range 단위로 batch 작성한다. ChatOps 응답은 같은 aggregate state를 사용하지만 대화형 질문에 맞춰 짧게 답한다.
+
+### 6. 모델 제공 방식: BYOK
 
 - `BYOK`를 전제로 설계
 - provider 선택은 추후 결정
 - core 계층은 특정 provider에 직접 종속되지 않도록 유지
 
-### 6. Queue backend: Redis Streams for process separation
+### 7. Queue backend: Redis Streams for process separation
 
 Step 2의 기본 local/test 구현은 `InMemoryJobQueue`를 유지한다. 단일 프로세스에서 gateway와 worker contract를 검증하기 쉽기 때문이다. 하지만 실제 배포에서는 `qaestro-gateway`와 `qaestro-worker`가 별도 프로세스로 실행되므로 메모리 queue는 공유되지 않는다.
 
@@ -77,3 +87,5 @@ Redis Streams를 우선 선택한 이유는 Step 2 목표인 gateway/worker proc
 - self-hosted HTTP server 패턴과 worker 실행 모델을 함께 설계할 것
 
 ## 추후 논의
+
+- [PR aggregate와 unified review lifecycle](./notes/PR_REVIEW_LIFECYCLE.md)

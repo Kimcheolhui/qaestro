@@ -71,7 +71,7 @@ PROpened    { meta: EventMeta, repo, pr_number, title, author, base_branch, head
 PRUpdated   { meta: EventMeta, repo, pr_number, ... }          # PROpened와 같은 필드 (synchronize/edited/reopened)
 PRCommented { meta: EventMeta, repo, pr_number, author, body, comment_id, ... }
 PRReviewed  { meta: EventMeta, repo, pr_number, reviewer, state, body, ... }   # state: approved/changes_requested/commented
-CICompleted { meta: EventMeta, repo, pr_number, commit_sha, conclusion, failed_jobs, ... }
+CICompleted { meta: EventMeta, repo, pr_number, commit_sha, run_id, conclusion, failed_jobs, ... }
 ChatMention { meta: EventMeta, platform, channel_id, channel_name, author, message, ... }
 ```
 
@@ -110,14 +110,25 @@ normalized event
 
 | 단계 | 허용되는 tool 성격 | Step 3.5 기준 예시 |
 |------|-------------------|--------------------|
-| Context acquisition | PR metadata/diff/files, PR comments/reviews, 관련 chat thread, knowledge read | `github.pr.view`, `github.pr.files`, `github.pr.diff` |
+| Context acquisition | PR metadata/diff/files, PR comments/reviews, CI workflow/run jobs, 관련 chat thread, knowledge read | `github.pr.view`, `github.pr.files`, `github.pr.diff`, `github.actions.run.jobs` |
+| Triage / readiness | 수집된 PR·CI·check context를 바탕으로 workflow depth와 final review 가능 여부 결정 | `PRWorkflowTriage`, current head check snapshot |
 | Analysis / strategy | 수집된 context, knowledge read, 제한된 추가 조회 | `knowledge.search` |
 | Validation | strategy가 선택한 runtime probe/test execution | 이후 Step 5에서 runtime probe tool 추가 |
-| Output | PR comment, review comment, chat response 같은 write action | `github.pr.comment.create_or_update` |
+| Output | PR managed comment, PR review/inline comment, chat response 같은 write action | `github.pr.comment.create_or_update`, 이후 `github.pr.review.create` |
 
 Read tool은 맥락 수집과 판단을 돕기 위해 비교적 넓게 허용할 수 있지만, write tool은 output policy를 거쳐야 한다. destructive action은 기본 금지이며, comment 작성·knowledge write 같은 side effect는 correlation id와 중복 방지 정책을 함께 고려한다.
 
 Step 3.5에서는 GitHub backend를 기존 GitHub Client API adapter로 유지하고, raw shell/CLI를 열지 않는다. 목표는 transport 교체가 아니라 `Worker`/workflow가 GitHub-specific provider나 poster를 직접 잡지 않도록 read/write 실행 경계를 `ToolRuntime` 뒤로 옮기는 것이다. Agent Framework runner가 들어오기 전까지 tool 선택은 deterministic sequence로 시작하되, 같은 tool contract와 stage policy 위에서 나중에 agent 선택으로 교체할 수 있어야 한다.
+
+### PR aggregate lifecycle
+
+PR, CI, GitHub comment/review, ChatOps mention은 서로 다른 이벤트로 들어오지만 최종 판단은 PR 단위 aggregate에 모아야 한다. `workflow_run completed` 이벤트 하나는 특정 workflow run이 끝났다는 사실만 알려주므로, 여러 workflow/check가 있는 PR에서는 current `head_sha` 기준 check snapshot을 다시 조회해 남은 pending/queued/in-progress check가 있는지 확인한 뒤 final review 시점을 결정한다.
+
+권장 모델은 PR 단위 `PRAggregateState` 안에 head commit별 `PRRevisionState`와 여러 `ReviewRun`을 두는 구조다. 새 commit이 올라오면 새 revision을 만들고 이전 revision은 stale/superseded로 보되, 이전 CI 실패와 분석 결과는 historical evidence로 참고한다. 다만 current verdict와 merge/readiness 판단의 source of truth는 항상 current `head_sha`의 diff와 check/CI 결과여야 한다.
+
+자동 공식 리포트는 CI/check를 기다려 하나의 unified review로 내는 방향을 우선한다. 5~10분 정도의 CI 대기는 정상적인 팀 개발 흐름으로 보고, 장시간 pending 상태는 timeout 후 partial review로 표시한다. 반대로 사용자가 GitHub comment나 channel에서 `@qaestro review`처럼 명시적으로 호출하면 조용히 기다리지 말고 현재 aggregate state 기준으로 즉시 답하되, 아직 pending인 workflow/check와 최종 판단 보류 상태를 함께 설명한다.
+
+출력 표면은 구분한다. PR-level managed summary comment는 전체 상태, CI/check 요약, 주요 finding 링크를 idempotent하게 update한다. 특정 코드 line/range에 대한 지적은 final unified review 시점에 GitHub review/inline comment로 batch 작성하며, 초기 PR-only 분석 단계에서 성급하게 line comment를 남겨 stale/noise를 만들지 않는다. ChatOps 응답은 같은 aggregate state를 바탕으로 하되 대화형 질의에 맞춰 짧게 응답한다.
 
 ### 2. Behaviour Analyzer
 
@@ -175,5 +186,6 @@ Agent의 QA 전략이 점진적으로 정밀해지기 위한 지식 저장소.
 
 | 채널        | 포맷            | 예시                                                                            |
 | ----------- | --------------- | ------------------------------------------------------------------------------- |
-| PR 코멘트   | 구조화된 리포트 | Behaviour Impact Report (High/Medium Risk 분류, Checklist)                      |
-| Slack/Teams | 대화형 자연어   | "결제 플로우에 영향이 예상됩니다. 영향 범위: checkout API, order-summary UI..." |
+| PR managed comment | 구조화된 리포트 | Behaviour Impact Report + CI/check summary를 같은 qaestro 코멘트로 update       |
+| PR review / inline comment | line/range 기반 리뷰 | final unified review 시점에 특정 diff line/range에 근거와 제안을 batch 작성     |
+| Slack/Teams | 대화형 자연어   | "CI는 아직 pending입니다. 현재 diff 기준 위험은 auth 경로에 집중됩니다."       |
