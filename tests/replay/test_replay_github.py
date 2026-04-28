@@ -44,6 +44,7 @@ class TestGitHubPRReplay:
         assert event.author == "jane-dev"
         assert event.base_branch == "main"
         assert event.head_branch == "feat/auth-middleware"
+        assert event.head_sha == "def789abc123456"
         assert len(event.files_changed) == 3
         assert event.files_changed[0].path == "src/middleware/auth_middleware.py"
         assert event.files_changed[0].status == "added"

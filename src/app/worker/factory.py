@@ -52,6 +52,7 @@ def _build_github_tool_runtime(client: GitHubClient) -> RegisteredToolRuntime:
                     "github.pr.files",
                     "github.pr.diff",
                     "github.actions.run.jobs",
+                    "github.checks.runs_for_ref",
                 ),
                 WorkflowStage.OUTPUT: ("github.pr.comment.create_or_update",),
             }

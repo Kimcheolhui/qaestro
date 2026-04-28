@@ -357,6 +357,7 @@ def _pr_event_from_payload(kind: EventType, meta: EventMeta, data: Mapping[str, 
             _file_change_from_payload(file_data, f"files_changed[{index}]")
             for index, file_data in enumerate(file_values)
         ),
+        head_sha=_require_str(data.get("head_sha", ""), "head_sha"),
     )
 
 

@@ -90,6 +90,7 @@ class PREvent:
     head_branch: str
     diff_url: str
     files_changed: tuple[FileChange, ...] = ()
+    head_sha: str = ""
 
 
 @dataclass(frozen=True)
