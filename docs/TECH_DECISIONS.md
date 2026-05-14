@@ -2,11 +2,12 @@
 
 qaestro의 배포 모델, Agent Runtime, 운영 경계 같은 기술 선택 사항을 정리하는 문서.
 
-아키텍처 문서는 컴포넌트 구조와 흐름을 설명하고, 이 문서는 "어떤 기술적 방향을 택할지"를 정리한다. 기술 선택은 이후 변경 가능성이 높기 때문에 별도 문서로 관리한다.
+아키텍처 문서는 컴포넌트 구조와 흐름을 설명하고, 이 문서는 "어떤 기술적 방향을 택할지"를 정리한다. 제품 포지셔닝과 다른 agent/runtime 대비 경계는 [PRODUCT_POSITIONING.md](./PRODUCT_POSITIONING.md)에 둔다. 기술 선택은 이후 변경 가능성이 높기 때문에 별도 문서로 관리한다.
 
 관련 문서:
 
 - [README.md](../README.md)
+- [PRODUCT_POSITIONING.md](./PRODUCT_POSITIONING.md)
 - [ARCHITECTURE.md](./ARCHITECTURE.md)
 - [PROJECT_STRUCTURE.md](./PROJECT_STRUCTURE.md)
 - [BACKLOG.md](./BACKLOG.md)
