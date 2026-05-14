@@ -45,11 +45,23 @@ class CIContextProvider(Protocol):
     def load(self, event: CICompleted) -> CICompleted: ...
 
 
+class PRAggregateCIRecorder(Protocol):
+    """Minimal PR aggregate store seam needed by CI completed workflows."""
+
+    def record_ci_completed(self, event: CICompleted) -> object: ...
+
+
 class CIWorkflowOrchestrator:
     """Classify completed CI events into linked/orphan feedback workflow results."""
 
-    def __init__(self, *, context_provider: CIContextProvider | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        context_provider: CIContextProvider | None = None,
+        aggregate_store: PRAggregateCIRecorder | None = None,
+    ) -> None:
         self._context_provider = context_provider
+        self._aggregate_store = aggregate_store
 
     def run(self, event: CICompleted) -> CIWorkflowResult:
         stages = (WorkflowStage.CONTEXT, WorkflowStage.TRIAGE)
@@ -65,6 +77,8 @@ class CIWorkflowOrchestrator:
             )
 
         event = self._context_provider.load(event) if self._context_provider is not None else event
+        if self._aggregate_store is not None:
+            self._aggregate_store.record_ci_completed(event)
         depth = _depth_for(event)
         failed_jobs = ", ".join(event.failed_jobs) if event.failed_jobs else "no failed jobs reported"
         return CIWorkflowResult(

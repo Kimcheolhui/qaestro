@@ -8,7 +8,7 @@ from typing import Protocol
 
 from src.adapters.renderers import PRCommentPayload
 from src.core.analyzer import PRAnalysisContext
-from src.core.contracts import BehaviourImpact, PREvent, QAReport, StrategyResult, ValidationResult
+from src.core.contracts import BehaviourImpact, CIFeedbackContext, PREvent, QAReport, StrategyResult, ValidationResult
 from src.runtime.stages import WorkflowStage
 
 from .pr_triage import PRWorkflowTriage
@@ -98,6 +98,7 @@ class PRStrategyEngine(Protocol):
         pr_number: int,
         title: str,
         impact: BehaviourImpact,
+        ci_feedback: CIFeedbackContext | None = None,
     ) -> StrategyResult: ...
 
 

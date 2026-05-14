@@ -2,7 +2,17 @@
 
 from __future__ import annotations
 
-from src.core.contracts import ActionType, BehaviourImpact, ImpactArea, RiskLevel, StrategyAction, StrategyResult
+from src.core.contracts import (
+    ActionType,
+    BehaviourImpact,
+    CIFeedbackContext,
+    CIHistoricalEvidence,
+    CIObservation,
+    ImpactArea,
+    RiskLevel,
+    StrategyAction,
+    StrategyResult,
+)
 from src.core.knowledge import InMemoryKnowledgeBase, KnowledgeBase, KnowledgeEntry, KnowledgeQuery
 
 
@@ -23,6 +33,7 @@ class RuleBasedPRStrategyEngine:
         pr_number: int,
         title: str,
         impact: BehaviourImpact,
+        ci_feedback: CIFeedbackContext | None = None,
     ) -> StrategyResult:
         del pr_number
         matches = self._knowledge.search(
@@ -31,11 +42,16 @@ class RuleBasedPRStrategyEngine:
                 query_text=_query_text_from_title_and_impact(title, impact),
             )
         )
-        actions = (*_area_actions(impact), *_baseline_actions(impact), *_knowledge_actions(matches))
+        actions = (
+            *_area_actions(impact),
+            *_baseline_actions(impact),
+            *_ci_feedback_actions(ci_feedback),
+            *_knowledge_actions(matches),
+        )
         return StrategyResult(
             actions=actions,
-            reasoning=_reasoning(impact, matches),
-            confidence=_confidence(impact.overall_risk, matches),
+            reasoning=_reasoning(impact, matches, ci_feedback),
+            confidence=_confidence(impact.overall_risk, matches, ci_feedback),
             knowledge_refs=tuple(entry.key for entry in matches),
         )
 
@@ -87,6 +103,57 @@ def _knowledge_actions(matches: tuple[KnowledgeEntry, ...]) -> tuple[StrategyAct
     return tuple(actions)
 
 
+def _ci_feedback_actions(ci_feedback: CIFeedbackContext | None) -> tuple[StrategyAction, ...]:
+    """Prioritize validation from current-head CI feedback.
+
+    This deterministic mapping is a temporary strategy seam for Step 4. It uses
+    observed current-head CI/check facts without diagnosing root cause; later
+    Agent Framework + repository knowledge can replace the prioritization logic
+    while preserving the CI feedback contract.
+    """
+    if ci_feedback is None:
+        return ()
+    actions: list[StrategyAction] = []
+    for observation in ci_feedback.current_observations:
+        conclusion = observation.conclusion.strip().lower()
+        if conclusion not in {"failure", "timed_out", "cancelled", "action_required", "startup_failure"}:
+            continue
+        actions.append(
+            StrategyAction(
+                action_type=ActionType.RUN_TESTS,
+                description=f"Review current-head CI workflow '{observation.workflow_name}' result",
+                target=f"ci:{observation.workflow_name}",
+                priority=4 if conclusion in {"failure", "timed_out", "action_required", "startup_failure"} else 3,
+                rationale=f"Current-head CI workflow concluded {conclusion}.",
+            )
+        )
+        for job in observation.failed_jobs:
+            actions.append(_ci_job_action(observation, job))
+    return tuple(actions)
+
+
+def _ci_job_action(observation: CIObservation, job: str) -> StrategyAction:
+    action_type = _ci_job_action_type(job)
+    return StrategyAction(
+        action_type=action_type,
+        description=f"Prioritize failed CI job '{job}' from workflow '{observation.workflow_name}'",
+        target=f"ci:{observation.workflow_name}/{job}",
+        priority=5,
+        rationale="Current-head failed job is observed evidence and should drive validation priority.",
+    )
+
+
+def _ci_job_action_type(job: str) -> ActionType:
+    normalized = job.strip().lower()
+    if any(token in normalized for token in ("mypy", "pyright", "type")):
+        return ActionType.TYPE_CHECK
+    if any(token in normalized for token in ("lint", "ruff", "eslint", "flake")):
+        return ActionType.RUN_LINTER
+    if any(token in normalized for token in ("security", "sast", "secret", "bandit")):
+        return ActionType.CHECK_SECURITY
+    return ActionType.RUN_TESTS
+
+
 def _action(
     *,
     action_type: ActionType,
@@ -106,14 +173,57 @@ def _action(
     )
 
 
-def _reasoning(impact: BehaviourImpact, matches: tuple[KnowledgeEntry, ...]) -> str:
+def _reasoning(
+    impact: BehaviourImpact,
+    matches: tuple[KnowledgeEntry, ...],
+    ci_feedback: CIFeedbackContext | None,
+) -> str:
     risk_label = impact.overall_risk.value.capitalize()
     path_groups = ", ".join(area.module for area in impact.areas) or "none"
     knowledge_text = f" Knowledge matches: {', '.join(entry.key for entry in matches)}." if matches else ""
-    return f"{risk_label} risk based on observed path groups: {path_groups}.{knowledge_text}"
+    ci_text = f" {_ci_reasoning(ci_feedback)}" if ci_feedback is not None else ""
+    return f"{risk_label} risk based on observed path groups: {path_groups}.{knowledge_text}{ci_text}"
 
 
-def _confidence(risk: RiskLevel, matches: tuple[KnowledgeEntry, ...]) -> float:
+def _ci_reasoning(ci_feedback: CIFeedbackContext) -> str:
+    segments: list[str] = [f"source of truth: {ci_feedback.current_head_sha}."]
+    if ci_feedback.current_observations:
+        current = "; ".join(_observation_summary(observation) for observation in ci_feedback.current_observations)
+        segments.append(f"current-head CI/check feedback: {current}.")
+    if ci_feedback.pending_checks:
+        segments.append(f"pending checks: {', '.join(ci_feedback.pending_checks)}.")
+    historical = tuple(
+        evidence
+        for evidence in ci_feedback.historical_evidence
+        if evidence.head_sha != ci_feedback.current_head_sha and evidence.observations
+    )
+    if historical:
+        segments.append(
+            "historical CI evidence on superseded heads: "
+            + "; ".join(_historical_summary(evidence) for evidence in historical)
+            + "."
+        )
+    return " ".join(segments)
+
+
+def _observation_summary(observation: CIObservation) -> str:
+    summary = f"{observation.workflow_name}={observation.conclusion.strip().lower()}"
+    if observation.failed_jobs:
+        summary += f" (failed jobs: {', '.join(observation.failed_jobs)})"
+    return summary
+
+
+def _historical_summary(evidence: CIHistoricalEvidence) -> str:
+    return f"{evidence.head_sha}: " + ", ".join(
+        _observation_summary(observation) for observation in evidence.observations
+    )
+
+
+def _confidence(
+    risk: RiskLevel,
+    matches: tuple[KnowledgeEntry, ...],
+    ci_feedback: CIFeedbackContext | None,
+) -> float:
     if _is_high(risk):
         base = 0.72
     elif risk is RiskLevel.MEDIUM:
@@ -121,6 +231,8 @@ def _confidence(risk: RiskLevel, matches: tuple[KnowledgeEntry, ...]) -> float:
     else:
         base = 0.82
     if matches:
+        base += 0.02
+    if ci_feedback is not None and (ci_feedback.current_observations or ci_feedback.pending_checks):
         base += 0.02
     return min(base, 0.9)
 

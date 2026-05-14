@@ -4,7 +4,16 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from src.core.contracts import CICompleted, EventMeta, EventSource, EventType, FileChange, PROpened, PRUpdated
+from src.core.contracts import (
+    CICompleted,
+    CIReadinessState,
+    EventMeta,
+    EventSource,
+    EventType,
+    FileChange,
+    PROpened,
+    PRUpdated,
+)
 from src.runtime.orchestrator import (
     CheckRunSnapshot,
     CheckRunStatus,
@@ -168,3 +177,51 @@ def test_manual_trigger_records_review_run_and_allows_interim_response() -> None
     assert readiness.state is ReviewReadinessState.WAITING_FOR_CHECKS
     assert readiness.can_publish_interim_response is True
     assert readiness.can_publish_final_review is False
+
+
+def test_aggregate_exports_ci_feedback_context_with_current_and_stale_evidence() -> None:
+    aggregate = PRAggregateState.from_pr_event(_pr_event(head_sha="sha-1"))
+    aggregate = aggregate.record_ci_completed(_ci_event(event_id="ci-old", commit_sha="sha-1", conclusion="failure"))
+    aggregate = aggregate.apply_pr_event(_pr_update(head_sha="sha-2"))
+    aggregate = aggregate.record_ci_completed(
+        _ci_event(event_id="ci-current", commit_sha="sha-2", conclusion="success")
+    )
+    current_checks = (
+        CheckRunSnapshot(name="Lint", status=CheckRunStatus.COMPLETED, conclusion="success", head_sha="sha-2"),
+        CheckRunSnapshot(name="Tests", status=CheckRunStatus.IN_PROGRESS, conclusion=None, head_sha="sha-2"),
+    )
+
+    readiness = aggregate.evaluate_readiness(current_check_snapshot=current_checks)
+    feedback = aggregate.to_ci_feedback_context(readiness=readiness, current_check_snapshot=current_checks)
+
+    assert feedback.current_head_sha == "sha-2"
+    assert feedback.readiness is CIReadinessState.WAITING_FOR_CHECKS
+    assert feedback.pending_checks == ("Tests",)
+    assert [(item.workflow_name, item.conclusion, item.commit_sha) for item in feedback.current_observations] == [
+        ("Tests", "success", "sha-2"),
+        ("Lint", "success", "sha-2"),
+    ]
+    assert len(feedback.historical_evidence) == 1
+    assert feedback.historical_evidence[0].head_sha == "sha-1"
+    assert feedback.historical_evidence[0].observations[0].conclusion == "failure"
+
+
+def test_aggregate_exports_current_head_failed_check_snapshot_without_ci_completed_event() -> None:
+    aggregate = PRAggregateState.from_pr_event(_pr_event(head_sha="sha-3"))
+    current_checks = (
+        CheckRunSnapshot(name="Ruff", status=CheckRunStatus.COMPLETED, conclusion="failure", head_sha="sha-3"),
+        CheckRunSnapshot(name="Old Ruff", status=CheckRunStatus.COMPLETED, conclusion="failure", head_sha="sha-old"),
+    )
+
+    readiness = aggregate.evaluate_readiness(current_check_snapshot=current_checks)
+    feedback = aggregate.to_ci_feedback_context(readiness=readiness, current_check_snapshot=current_checks)
+
+    assert feedback.readiness is CIReadinessState.CHECKS_FAILED
+    assert feedback.current_observations == (
+        # Check snapshots are current-head evidence even when no workflow_run webhook has been recorded yet.
+        feedback.current_observations[0],
+    )
+    assert feedback.current_observations[0].workflow_name == "Ruff"
+    assert feedback.current_observations[0].conclusion == "failure"
+    assert feedback.current_observations[0].commit_sha == "sha-3"
+    assert feedback.pending_checks == ()
