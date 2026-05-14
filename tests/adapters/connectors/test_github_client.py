@@ -292,6 +292,89 @@ def test_list_workflow_run_jobs_validates_run_id(client):
         client.list_workflow_run_jobs(OWNER, REPO, 0)
 
 
+# ── list_check_runs_for_ref ───────────────────────────────────────────────
+
+
+def test_list_check_runs_for_ref_returns_check_run_results(client, transport):
+    check_payload = {
+        "check_runs": [
+            {
+                "name": "Tests",
+                "status": "completed",
+                "conclusion": "success",
+                "html_url": "https://github.com/octocat/hello-world/runs/11",
+                "head_sha": "abc123",
+            },
+            {
+                "name": "Lint",
+                "status": "in_progress",
+                "conclusion": None,
+                "html_url": "https://github.com/octocat/hello-world/runs/12",
+                "head_sha": "abc123",
+            },
+        ]
+    }
+    transport.route(
+        "GET",
+        f"https://api.github.com/repos/{OWNER}/{REPO}/commits/abc123/check-runs?per_page=100&page=1",
+        FakeResponse(status=200, body=json.dumps(check_payload).encode()),
+    )
+
+    checks = client.list_check_runs_for_ref(OWNER, REPO, "abc123")
+
+    assert [check.name for check in checks] == ["Tests", "Lint"]
+    assert [check.status for check in checks] == ["completed", "in_progress"]
+    assert [check.conclusion for check in checks] == ["success", ""]
+    assert [check.head_sha for check in checks] == ["abc123", "abc123"]
+
+
+def test_list_check_runs_for_ref_handles_pagination(client, transport):
+    page1 = {
+        "check_runs": [
+            {
+                "name": f"check-{i}",
+                "status": "completed",
+                "conclusion": "success",
+                "html_url": f"https://example.com/{i}",
+                "head_sha": "abc123",
+            }
+            for i in range(100)
+        ]
+    }
+    page2 = {
+        "check_runs": [
+            {
+                "name": "last",
+                "status": "queued",
+                "conclusion": None,
+                "html_url": "https://example.com/last",
+                "head_sha": "abc123",
+            }
+        ]
+    }
+    transport.route(
+        "GET",
+        f"https://api.github.com/repos/{OWNER}/{REPO}/commits/abc123/check-runs?per_page=100&page=1",
+        FakeResponse(status=200, body=json.dumps(page1).encode()),
+    )
+    transport.route(
+        "GET",
+        f"https://api.github.com/repos/{OWNER}/{REPO}/commits/abc123/check-runs?per_page=100&page=2",
+        FakeResponse(status=200, body=json.dumps(page2).encode()),
+    )
+
+    checks = client.list_check_runs_for_ref(OWNER, REPO, "abc123")
+
+    assert len(checks) == 101
+    assert checks[-1].name == "last"
+    assert checks[-1].status == "queued"
+
+
+def test_list_check_runs_for_ref_validates_ref(client):
+    with pytest.raises(ValueError, match="ref"):
+        client.list_check_runs_for_ref(OWNER, REPO, "")
+
+
 # ── create_issue_comment ─────────────────────────────────────────────────
 
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from src.adapters.connectors.github import ActionsJobResult, CommentResult, FileDiff, PRMeta
+from src.adapters.connectors.github import ActionsJobResult, CheckRunResult, CommentResult, FileDiff, PRMeta
 
 from . import ToolCall, ToolCapability, ToolDefinition
 
@@ -19,6 +19,8 @@ class GitHubPRToolClient(Protocol):
     def get_pull_request_diff(self, owner: str, repo: str, number: int) -> str: ...
 
     def list_workflow_run_jobs(self, owner: str, repo: str, run_id: int) -> list[ActionsJobResult]: ...
+
+    def list_check_runs_for_ref(self, owner: str, repo: str, ref: str) -> list[CheckRunResult]: ...
 
     def create_issue_comment(self, owner: str, repo: str, number: int, body: str) -> CommentResult: ...
 
@@ -49,6 +51,11 @@ def build_github_pr_tools(client: GitHubPRToolClient) -> tuple[ToolDefinition, .
             name="github.actions.run.jobs",
             capabilities=(ToolCapability.READ,),
             handler=lambda call: _list_workflow_run_jobs(client, call),
+        ),
+        ToolDefinition(
+            name="github.checks.runs_for_ref",
+            capabilities=(ToolCapability.READ,),
+            handler=lambda call: _list_check_runs_for_ref(client, call),
         ),
         ToolDefinition(
             name="github.pr.comment.create_or_update",
@@ -85,6 +92,14 @@ def _list_workflow_run_jobs(client: GitHubPRToolClient, call: ToolCall) -> tuple
     if run_id <= 0:
         raise ValueError("run_id must be greater than 0")
     return tuple(client.list_workflow_run_jobs(owner, repo, run_id))
+
+
+def _list_check_runs_for_ref(client: GitHubPRToolClient, call: ToolCall) -> tuple[CheckRunResult, ...]:
+    owner, repo = _repo_input(call)
+    ref = str(call.input.get("ref", "")).strip()
+    if not ref:
+        raise ValueError("ref is required")
+    return tuple(client.list_check_runs_for_ref(owner, repo, ref))
 
 
 def _create_or_update_comment(client: GitHubPRToolClient, call: ToolCall) -> CommentResult:

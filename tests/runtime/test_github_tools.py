@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.adapters.connectors.github import ActionsJobResult, CommentResult, FileDiff, PRMeta
+from src.adapters.connectors.github import ActionsJobResult, CheckRunResult, CommentResult, FileDiff, PRMeta
 from src.adapters.renderers import PRCommentPayload
 from src.runtime.orchestrator import ToolRuntimePRCommentPoster
 from src.runtime.stages import WorkflowStage
@@ -62,6 +62,25 @@ class RecordingGitHubClient:
             ),
         ]
 
+    def list_check_runs_for_ref(self, owner: str, repo: str, ref: str) -> list[CheckRunResult]:
+        self.calls.append(("check_runs", owner, repo, ref))
+        return [
+            CheckRunResult(
+                name="Tests",
+                status="completed",
+                conclusion="success",
+                html_url="https://github.com/octocat/hello-world/runs/11",
+                head_sha=ref,
+            ),
+            CheckRunResult(
+                name="Lint",
+                status="in_progress",
+                conclusion="",
+                html_url="https://github.com/octocat/hello-world/runs/12",
+                head_sha=ref,
+            ),
+        ]
+
     def create_issue_comment(self, owner: str, repo: str, number: int, body: str) -> CommentResult:
         self.calls.append(("comment", owner, repo, number, body))
         return CommentResult(
@@ -84,7 +103,12 @@ def _runtime(client: RecordingGitHubClient) -> RegisteredToolRuntime:
         tools=build_github_pr_tools(client),
         policy=StageToolPolicy(
             {
-                WorkflowStage.CONTEXT: ("github.pr.view", "github.pr.files", "github.pr.diff"),
+                WorkflowStage.CONTEXT: (
+                    "github.pr.view",
+                    "github.pr.files",
+                    "github.pr.diff",
+                    "github.checks.runs_for_ref",
+                ),
                 WorkflowStage.OUTPUT: ("github.pr.comment.create_or_update",),
             }
         ),
@@ -177,6 +201,62 @@ def test_github_actions_jobs_tool_returns_failed_job_names_through_context_stage
         ),
     )
     assert client.calls == [("actions_jobs", "octocat", "hello-world", 99)]
+
+
+def test_github_check_runs_tool_returns_current_ref_snapshot_through_context_stage() -> None:
+    client = RecordingGitHubClient()
+    runtime = RegisteredToolRuntime(
+        tools=build_github_pr_tools(client),
+        policy=StageToolPolicy({WorkflowStage.CONTEXT: ("github.checks.runs_for_ref",)}),
+    )
+
+    result = runtime.execute(
+        ToolCall(
+            stage=WorkflowStage.CONTEXT,
+            name="github.checks.runs_for_ref",
+            input={"repo_full_name": "octocat/hello-world", "ref": "abc123"},
+            correlation_id="corr-checks",
+        )
+    )
+
+    assert result.ok is True
+    assert result.output == (
+        CheckRunResult(
+            name="Tests",
+            status="completed",
+            conclusion="success",
+            html_url="https://github.com/octocat/hello-world/runs/11",
+            head_sha="abc123",
+        ),
+        CheckRunResult(
+            name="Lint",
+            status="in_progress",
+            conclusion="",
+            html_url="https://github.com/octocat/hello-world/runs/12",
+            head_sha="abc123",
+        ),
+    )
+    assert client.calls == [("check_runs", "octocat", "hello-world", "abc123")]
+
+
+def test_github_check_runs_tool_requires_ref() -> None:
+    client = RecordingGitHubClient()
+    runtime = RegisteredToolRuntime(
+        tools=build_github_pr_tools(client),
+        policy=StageToolPolicy({WorkflowStage.CONTEXT: ("github.checks.runs_for_ref",)}),
+    )
+
+    result = runtime.execute(
+        ToolCall(
+            stage=WorkflowStage.CONTEXT,
+            name="github.checks.runs_for_ref",
+            input={"repo_full_name": "octocat/hello-world", "ref": ""},
+            correlation_id="corr-checks",
+        )
+    )
+
+    assert result.ok is False
+    assert "ref is required" in result.error
 
 
 def test_github_actions_jobs_tool_requires_run_id() -> None:

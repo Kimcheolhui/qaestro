@@ -26,7 +26,7 @@ from urllib.parse import quote, urlencode
 from .auth import GitHubAppAuth
 from .errors import AuthError, GitHubError, NotFoundError, RateLimitError
 from .transport import HTTPResponse, HTTPTransport, UrllibTransport
-from .types import ActionsJobResult, CommentResult, FileDiff, PRMeta
+from .types import ActionsJobResult, CheckRunResult, CommentResult, FileDiff, PRMeta
 
 # Page size for listing endpoints. Max allowed by GitHub is 100.
 _DEFAULT_PER_PAGE = 100
@@ -218,6 +218,38 @@ class GitHubClient:
                 break
         return results
 
+    def list_check_runs_for_ref(
+        self,
+        owner: str,
+        repo: str,
+        ref: str,
+        *,
+        per_page: int = _DEFAULT_PER_PAGE,
+    ) -> list[CheckRunResult]:
+        """List check runs for a commit ref, walking pagination eagerly."""
+        if not ref.strip():
+            raise ValueError("ref must not be empty")
+        if not 1 <= per_page <= 100:
+            raise ValueError("per_page must be between 1 and 100")
+
+        results: list[CheckRunResult] = []
+        encoded_ref = _segment(ref)
+        for page in range(1, _MAX_PAGES + 1):
+            query = urlencode({"per_page": per_page, "page": page})
+            path = f"/repos/{_segment(owner)}/{_segment(repo)}/commits/{encoded_ref}/check-runs?{query}"
+            resp = self._request("GET", path)
+            page_data = resp.json()
+            if not isinstance(page_data, dict) or not isinstance(page_data.get("check_runs"), list):
+                raise GitHubError("unexpected check-runs payload shape")
+            check_runs = page_data["check_runs"]
+            for item in check_runs:
+                if not isinstance(item, dict):
+                    raise GitHubError("unexpected check-runs payload shape")
+                results.append(_check_run_from_payload(item, default_head_sha=ref))
+            if len(check_runs) < per_page:
+                break
+        return results
+
     # ── Internal ──────────────────────────────────────────────────────
 
     def _request(
@@ -334,4 +366,14 @@ def _actions_job_from_payload(data: dict[str, Any]) -> ActionsJobResult:
         name=str(data.get("name", "")),
         conclusion=str(data.get("conclusion", "") or ""),
         html_url=str(data.get("html_url", "")),
+    )
+
+
+def _check_run_from_payload(data: dict[str, Any], *, default_head_sha: str) -> CheckRunResult:
+    return CheckRunResult(
+        name=str(data.get("name", "")),
+        status=str(data.get("status", "") or ""),
+        conclusion=str(data.get("conclusion", "") or ""),
+        html_url=str(data.get("html_url", "")),
+        head_sha=str(data.get("head_sha", "") or default_head_sha),
     )

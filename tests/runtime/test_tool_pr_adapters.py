@@ -4,10 +4,15 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from src.adapters.connectors.github import CommentResult, FileDiff, PRMeta
+from src.adapters.connectors.github import CheckRunResult, CommentResult, FileDiff, PRMeta
 from src.adapters.renderers import PRCommentPayload
 from src.core.contracts import EventMeta, EventSource, EventType, PROpened
-from src.runtime.orchestrator import ToolRuntimePRCommentPoster, ToolRuntimePRContextProvider
+from src.runtime.orchestrator import (
+    CheckRunStatus,
+    ToolRuntimePRCheckSnapshotProvider,
+    ToolRuntimePRCommentPoster,
+    ToolRuntimePRContextProvider,
+)
 from src.runtime.stages import WorkflowStage
 from src.runtime.tools import ToolAuditEntry, ToolCall, ToolResult
 
@@ -38,6 +43,22 @@ class RecordingRuntime:
                 ),
             ),
             "github.pr.diff": "diff --git a/src/runtime/tools/__init__.py b/src/runtime/tools/__init__.py",
+            "github.checks.runs_for_ref": (
+                CheckRunResult(
+                    name="Tests",
+                    status="completed",
+                    conclusion="success",
+                    html_url="https://github.com/octocat/hello-world/runs/1",
+                    head_sha="abc123",
+                ),
+                CheckRunResult(
+                    name="Lint",
+                    status="in_progress",
+                    conclusion="",
+                    html_url="https://github.com/octocat/hello-world/runs/2",
+                    head_sha="abc123",
+                ),
+            ),
             "github.pr.comment.create_or_update": CommentResult(
                 id=9876,
                 html_url="https://github.com/octocat/hello-world/pull/77#issuecomment-9876",
@@ -86,6 +107,29 @@ def test_tool_runtime_pr_context_provider_collects_context_via_context_stage_too
         (WorkflowStage.CONTEXT, "github.pr.view", "corr-tools"),
         (WorkflowStage.CONTEXT, "github.pr.files", "corr-tools"),
         (WorkflowStage.CONTEXT, "github.pr.diff", "corr-tools"),
+    ]
+
+
+def test_tool_runtime_check_snapshot_provider_collects_current_head_checks() -> None:
+    runtime = RecordingRuntime()
+
+    checks = ToolRuntimePRCheckSnapshotProvider(runtime).load(
+        repo_full_name="octocat/hello-world",
+        head_sha="abc123",
+        correlation_id="corr-checks",
+    )
+
+    assert [(check.name, check.status, check.conclusion, check.head_sha) for check in checks] == [
+        ("Tests", CheckRunStatus.COMPLETED, "success", "abc123"),
+        ("Lint", CheckRunStatus.IN_PROGRESS, None, "abc123"),
+    ]
+    assert [(call.stage, call.name, call.input, call.correlation_id) for call in runtime.calls] == [
+        (
+            WorkflowStage.CONTEXT,
+            "github.checks.runs_for_ref",
+            {"repo_full_name": "octocat/hello-world", "ref": "abc123"},
+            "corr-checks",
+        )
     ]
 
 

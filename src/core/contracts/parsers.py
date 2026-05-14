@@ -117,6 +117,7 @@ def parse_github_pr_event(
         "head_branch": _get(pr, "head", "ref"),
         "diff_url": pr.get("diff_url", ""),
         "files_changed": files_changed,
+        "head_sha": _get(pr, "head", "sha"),
     }
 
     if event_type == EventType.PR_OPENED:

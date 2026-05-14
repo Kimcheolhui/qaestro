@@ -54,3 +54,14 @@ class ActionsJobResult:
     name: str
     conclusion: str
     html_url: str
+
+
+@dataclass(frozen=True)
+class CheckRunResult:
+    """Result summary for one check run on a commit ref."""
+
+    name: str
+    status: str
+    conclusion: str
+    html_url: str
+    head_sha: str

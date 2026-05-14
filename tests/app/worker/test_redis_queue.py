@@ -103,6 +103,7 @@ def _pr_opened() -> PROpened:
         head_branch="feat/redis-queue",
         diff_url="https://github.com/Kimcheolhui/qaestro/pull/34.diff",
         files_changed=(FileChange(path="src/app/jobs.py", status="modified", additions=20, deletions=2),),
+        head_sha="abc123",
     )
 
 
@@ -121,6 +122,7 @@ def _events() -> list[Event]:
             head_branch=opened.head_branch,
             diff_url=opened.diff_url,
             files_changed=opened.files_changed,
+            head_sha="def456",
         ),
         PRCommented(
             meta=_meta(EventType.PR_COMMENTED),
