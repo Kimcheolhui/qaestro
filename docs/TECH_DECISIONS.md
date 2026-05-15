@@ -53,7 +53,7 @@ Step 3.5의 ToolRuntime 전환은 이 방향을 코드 경계로 고정하기 �
 
 #46의 Agent Framework 정렬은 SDK full integration이 아니라 adapter seam으로 제한한다. `src.runtime.tools.agent_framework`는 Microsoft Agent Framework의 function/tool calling model에 넘길 수 있는 framework-neutral tool spec을 만들되, stage policy가 허용한 tool만 노출한다. 실제 호출도 runner가 raw handler를 직접 실행하지 않고 `ToolRuntime.execute()`를 통과해야 하므로 qaestro의 stage policy, audit, correlation/idempotency 경계가 유지된다.
 
-Step 5는 Runtime Validation 자체가 아니라 **Agent Runtime Foundation**으로 둔다. 현재 구현은 `WorkerExecutionContext.agent_runner` 같은 opaque slot과 tool adapter seam만 있고, 실제 agent session 생성, LLM provider 설정, model/deployment 선택, credential loading, execution budget, fake/real provider 분리, 최소 capability 판단이 없다. 이 상태에서 validation probe workflow를 먼저 구현하면 실행 주체가 없는 interface만 늘거나, Azure OpenAI/GitHub Models/OpenAI-compatible provider 중 하나에 우발적으로 결합될 가능성이 높다. 따라서 구체 validation probe와 report 반영은 Step 6으로 미루고, Step 5에서는 BYOK 기반 provider/session/runner contract와 Microsoft Agent Framework SDK 격리 경계를 먼저 구현한다.
+Step 5는 Runtime Validation 자체가 아니라 **Agent Runtime Foundation**으로 둔다. 현재 구현은 `WorkerExecutionContext.agent_runner` 같은 opaque slot과 tool adapter seam만 있고, 실제 agent session 생성, LLM provider 설정, model/deployment 선택, credential loading, execution budget, fake/real provider 분리, 최소 capability 판단이 없다. 이 상태에서 validation probe workflow를 먼저 구현하면 실행 주체가 없는 interface만 늘거나, Azure OpenAI/OpenAI-compatible provider 중 하나에 우발적으로 결합될 가능성이 높다. 따라서 구체 validation probe와 report 반영은 Step 6으로 미루고, Step 5에서는 BYOK 기반 provider/session/runner contract와 Microsoft Agent Framework SDK 격리 경계를 먼저 구현한다.
 
 ### 5. PR review lifecycle: deferred unified review + manual trigger first
 
@@ -69,7 +69,7 @@ PR aggregate는 PR 전체 수명과 대화 history를 유지하고, 그 안에 `
 
 - `BYOK`를 전제로 설계
 - Agent Runtime 설정은 provider, model/deployment id, endpoint/base URL, credential reference, timeout, max turns/tool calls, temperature 같은 실행 예산을 명시적으로 표현해야 한다.
-- Azure OpenAI와 GitHub Models/OpenAI-compatible provider는 설정 shape를 분리하되, core 계층은 특정 provider SDK type에 직접 종속되지 않도록 유지한다.
+- Azure OpenAI와 OpenAI-compatible provider는 설정 shape를 분리하되, core 계층은 특정 provider SDK type에 직접 종속되지 않도록 유지한다.
 - credential 값은 config object의 repr, log, report, issue output에 노출하지 않는다.
 - provider 선택과 session 생성은 `app/worker` 또는 `runtime/agent` adapter/factory 경계에 두고, 테스트에서는 fake provider로 같은 contract를 검증한다.
 
