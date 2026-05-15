@@ -5,11 +5,15 @@ from __future__ import annotations
 from pathlib import Path
 
 from src.adapters.connectors.github import GitHubAppAuth, GitHubClient
+from src.core.contracts import CIFeedbackContext, PREvent
 from src.runtime.orchestrator import (
     CIWorkflowOrchestrator,
     EventOrchestrator,
+    InMemoryPRAggregateStore,
+    PRCheckSnapshotProvider,
     PRWorkflowOrchestrator,
     ToolRuntimeCIContextProvider,
+    ToolRuntimePRCheckSnapshotProvider,
     ToolRuntimePRCommentPoster,
     ToolRuntimePRContextProvider,
 )
@@ -33,13 +37,46 @@ def build_worker(cfg: AppConfig) -> Worker:
 
     client = _build_github_client(cfg)
     tool_runtime = _build_github_tool_runtime(client)
+    pr_aggregate_store = InMemoryPRAggregateStore()
     return Worker(
         orchestrator=EventOrchestrator(
-            pr_orchestrator=PRWorkflowOrchestrator(context_provider=ToolRuntimePRContextProvider(tool_runtime)),
-            ci_orchestrator=CIWorkflowOrchestrator(context_provider=ToolRuntimeCIContextProvider(tool_runtime)),
+            pr_orchestrator=PRWorkflowOrchestrator(
+                context_provider=ToolRuntimePRContextProvider(tool_runtime),
+                ci_feedback_provider=lambda event: _load_ci_feedback_for_pr_event(
+                    event=event,
+                    aggregate_store=pr_aggregate_store,
+                    check_provider=ToolRuntimePRCheckSnapshotProvider(tool_runtime),
+                ),
+            ),
+            ci_orchestrator=CIWorkflowOrchestrator(
+                context_provider=ToolRuntimeCIContextProvider(tool_runtime),
+                aggregate_store=pr_aggregate_store,
+            ),
         ),
         output_poster=ToolRuntimePRCommentPoster(tool_runtime),
     )
+
+
+def _load_ci_feedback_for_pr_event(
+    *,
+    event: PREvent,
+    aggregate_store: InMemoryPRAggregateStore,
+    check_provider: PRCheckSnapshotProvider,
+) -> CIFeedbackContext:
+    """Update PR aggregate and export current-head CI/check feedback.
+
+    This is Step 4 wiring for strategy input only. The in-memory aggregate store
+    is a temporary durable-worker seam; later persistence can replace it without
+    changing the Strategy Engine CI feedback contract.
+    """
+    aggregate = aggregate_store.apply_pr_event(event)
+    checks = check_provider.load(
+        repo_full_name=event.repo_full_name,
+        head_sha=aggregate.current_head_sha,
+        correlation_id=event.meta.correlation_id,
+    )
+    readiness = aggregate.evaluate_readiness(current_check_snapshot=checks)
+    return aggregate.to_ci_feedback_context(readiness=readiness, current_check_snapshot=checks)
 
 
 def _build_github_tool_runtime(client: GitHubClient) -> RegisteredToolRuntime:

@@ -11,6 +11,57 @@ from enum import Enum, unique
 
 
 @unique
+class CIReadinessState(Enum):
+    """Current-head CI/check readiness state exposed to strategy planning."""
+
+    READY = "ready"
+    WAITING_FOR_CHECKS = "waiting_for_checks"
+    CHECKS_FAILED = "checks_failed"
+
+
+@dataclass(frozen=True)
+class CIObservation:
+    """One CI/check observation associated with a specific commit.
+
+    This is strategy input, not final diagnosis. The Strategy Engine can use it
+    to prioritize validation actions while keeping CI source-of-truth handling
+    outside the Behaviour Analyzer.
+    """
+
+    workflow_name: str
+    conclusion: str
+    run_url: str
+    failed_jobs: tuple[str, ...] = ()
+    commit_sha: str = ""
+    logs_url: str = ""
+
+
+@dataclass(frozen=True)
+class CIHistoricalEvidence:
+    """CI/check observations from a superseded PR revision."""
+
+    head_sha: str
+    observations: tuple[CIObservation, ...]
+
+
+@dataclass(frozen=True)
+class CIFeedbackContext:
+    """CI/check feedback supplied to strategy planning for one PR aggregate.
+
+    ``current_observations`` and ``pending_checks`` describe the current head and
+    are eligible to affect the current strategy. ``historical_evidence`` is only
+    explanatory context from superseded revisions and must not become the source
+    of truth for the current verdict.
+    """
+
+    current_head_sha: str
+    readiness: CIReadinessState
+    current_observations: tuple[CIObservation, ...] = ()
+    historical_evidence: tuple[CIHistoricalEvidence, ...] = ()
+    pending_checks: tuple[str, ...] = ()
+
+
+@unique
 class RiskLevel(Enum):
     """Risk classification for a code change."""
 

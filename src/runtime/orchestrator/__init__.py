@@ -7,7 +7,13 @@ re-exports the public orchestration entrypoints and contracts.
 from __future__ import annotations
 
 from .chat_workflow import ChatWorkflowOrchestrator
-from .ci_workflow import CIContextProvider, CIWorkflowDepth, CIWorkflowOrchestrator, CIWorkflowResult
+from .ci_workflow import (
+    CIContextProvider,
+    CIWorkflowDepth,
+    CIWorkflowOrchestrator,
+    CIWorkflowResult,
+    PRAggregateCIRecorder,
+)
 from .dispatcher import EventOrchestrator
 from .pr_aggregate import (
     CheckRunSnapshot,
@@ -55,6 +61,7 @@ __all__ = [
     "EventOrchestrator",
     "EventPRContextProvider",
     "InMemoryPRAggregateStore",
+    "PRAggregateCIRecorder",
     "PRAggregateState",
     "PRBehaviourAnalyzer",
     "PRCheckSnapshotProvider",

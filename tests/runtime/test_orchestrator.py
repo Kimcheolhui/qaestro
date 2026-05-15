@@ -12,6 +12,9 @@ from src.core.contracts import (
     BehaviourImpact,
     ChatMention,
     CICompleted,
+    CIFeedbackContext,
+    CIObservation,
+    CIReadinessState,
     EventMeta,
     EventSource,
     EventType,
@@ -230,6 +233,45 @@ def test_ci_workflow_orchestrator_keeps_ci_success_lightweight() -> None:
     assert "CI completed with success" in result.summary
 
 
+def test_ci_workflow_orchestrator_records_linked_ci_feedback_in_pr_aggregate_store() -> None:
+    class RecordingAggregateStore:
+        def __init__(self) -> None:
+            self.events: list[CICompleted] = []
+
+        def record_ci_completed(self, event: CICompleted) -> object:
+            self.events.append(event)
+            return object()
+
+    store = RecordingAggregateStore()
+    event = _ci_completed_event()
+
+    result = CIWorkflowOrchestrator(aggregate_store=store).run(event)
+
+    assert result.depth is CIWorkflowDepth.DEEP
+    assert store.events == [event]
+
+
+def test_ci_workflow_orchestrator_does_not_record_orphan_ci_in_pr_aggregate_store() -> None:
+    class FailingAggregateStore:
+        def record_ci_completed(self, event: CICompleted) -> object:
+            raise AssertionError("orphan CI should not be recorded in PR aggregate")
+
+    event = CICompleted(
+        meta=_event_meta("evt-ci-orphan-store", EventType.CI_COMPLETED, "corr-ci-orphan-store"),
+        repo_full_name="Kimcheolhui/qaestro",
+        pr_number=None,
+        commit_sha="def456",
+        workflow_name="Tests",
+        conclusion="failure",
+        run_url="https://github.com/Kimcheolhui/qaestro/actions/runs/2",
+    )
+
+    result = CIWorkflowOrchestrator(aggregate_store=FailingAggregateStore()).run(event)
+
+    assert result.depth is CIWorkflowDepth.ORPHAN
+    assert result.comment_payload is None
+
+
 def test_event_orchestrator_routes_pr_comment_and_review_events_to_explicit_stubs():
     orchestrator = EventOrchestrator()
 
@@ -293,6 +335,49 @@ def test_pr_workflow_orchestrator_passes_draft_to_injected_renderer():
     assert not hasattr(renderer.calls[0], "comment_payload")
     assert result.comment_payload is not None
     assert result.comment_payload.body == "custom renderer output"
+
+
+def test_pr_workflow_orchestrator_passes_ci_feedback_to_strategy_engine() -> None:
+    class RecordingStrategyEngine:
+        def __init__(self) -> None:
+            self.ci_feedback: list[CIFeedbackContext | None] = []
+
+        def plan(
+            self,
+            *,
+            repo_full_name: str,
+            pr_number: int,
+            title: str,
+            impact: BehaviourImpact,
+            ci_feedback: CIFeedbackContext | None = None,
+        ) -> StrategyResult:
+            del repo_full_name, pr_number, title, impact
+            self.ci_feedback.append(ci_feedback)
+            return StrategyResult(actions=(), reasoning="strategy saw ci feedback", confidence=0.8)
+
+    ci_feedback = CIFeedbackContext(
+        current_head_sha="abc123",
+        readiness=CIReadinessState.CHECKS_FAILED,
+        current_observations=(
+            CIObservation(
+                workflow_name="Tests",
+                conclusion="failure",
+                run_url="https://github.com/Kimcheolhui/qaestro/actions/runs/1",
+                failed_jobs=("pytest",),
+                commit_sha="abc123",
+            ),
+        ),
+    )
+    strategy_engine = RecordingStrategyEngine()
+    orchestrator = PRWorkflowOrchestrator(
+        strategy_engine=strategy_engine,
+        ci_feedback_provider=lambda event: ci_feedback,
+    )
+
+    result = orchestrator.run(_pr_opened_event())
+
+    assert strategy_engine.ci_feedback == [ci_feedback]
+    assert result.strategy.reasoning == "strategy saw ci feedback"
 
 
 def test_pr_workflow_orchestrator_can_skip_validation_via_policy_hook():
@@ -534,7 +619,7 @@ def test_pr_workflow_orchestrator_accepts_replaceable_components():
 
     class RecordingStrategyEngine:
         def __init__(self) -> None:
-            self.calls: list[tuple[str, int, str, BehaviourImpact]] = []
+            self.calls: list[tuple[str, int, str, BehaviourImpact, CIFeedbackContext | None]] = []
 
         def plan(
             self,
@@ -543,8 +628,9 @@ def test_pr_workflow_orchestrator_accepts_replaceable_components():
             pr_number: int,
             title: str,
             impact: BehaviourImpact,
+            ci_feedback: CIFeedbackContext | None = None,
         ) -> StrategyResult:
-            self.calls.append((repo_full_name, pr_number, title, impact))
+            self.calls.append((repo_full_name, pr_number, title, impact, ci_feedback))
             return StrategyResult(
                 actions=(
                     StrategyAction(
@@ -578,7 +664,7 @@ def test_pr_workflow_orchestrator_accepts_replaceable_components():
     result = orchestrator.run(event)
 
     assert analyzer.events[0].repo_full_name == event.repo_full_name
-    assert strategy_engine.calls == [(event.repo_full_name, event.pr_number, event.title, result.impact)]
+    assert strategy_engine.calls == [(event.repo_full_name, event.pr_number, event.title, result.impact, None)]
     assert validator.calls == [result.strategy]
     assert result.impact.summary == "custom impact"
     assert result.strategy.reasoning == "custom strategy"

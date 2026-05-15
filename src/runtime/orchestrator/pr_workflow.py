@@ -9,6 +9,7 @@ from src.adapters.renderers import GitHubPRCommentRenderer, PRCommentPayload
 from src.core.analyzer import PRAnalysisContext, RuleBasedPRBehaviourAnalyzer
 from src.core.contracts import (
     BehaviourImpact,
+    CIFeedbackContext,
     PREvent,
     QAReport,
     RiskLevel,
@@ -46,6 +47,7 @@ class PRWorkflowOrchestrator:
         validator: PRRuntimeValidator | None = None,
         renderer: PRWorkflowRenderer | None = None,
         should_validate: ShouldValidate | None = None,
+        ci_feedback_provider: Callable[[PREvent], CIFeedbackContext | None] | None = None,
     ) -> None:
         self._context_provider = context_provider or EventPRContextProvider()
         self._triage_classifier = _as_triage_classifier(triage_classifier or RuleBasedPRWorkflowTriageClassifier())
@@ -54,6 +56,7 @@ class PRWorkflowOrchestrator:
         self._validator = validator or StubPRRuntimeValidator()
         self._renderer = renderer or _DefaultDraftRenderer()
         self._should_validate = should_validate or (lambda event, impact, strategy: True)
+        self._ci_feedback_provider = ci_feedback_provider
 
     def run(self, event: PREvent) -> PRWorkflowResult:
         """Run the bounded PR workflow for one normalized event."""
@@ -94,11 +97,13 @@ class PRWorkflowOrchestrator:
         strategy: StrategyResult
         if triage.runs_strategy:
             stages.append(WorkflowStage.STRATEGY)
+            ci_feedback = self._ci_feedback_provider(event) if self._ci_feedback_provider is not None else None
             strategy = self._strategy_engine.plan(
                 repo_full_name=context.repo_full_name,
                 pr_number=context.pr_number,
                 title=context.title,
                 impact=impact,
+                ci_feedback=ci_feedback,
             )
         else:
             strategy = _empty_strategy(triage)

@@ -2,7 +2,16 @@
 
 from __future__ import annotations
 
-from src.core.contracts import ActionType, BehaviourImpact, ImpactArea, RiskLevel
+from src.core.contracts import (
+    ActionType,
+    BehaviourImpact,
+    CIFeedbackContext,
+    CIHistoricalEvidence,
+    CIObservation,
+    CIReadinessState,
+    ImpactArea,
+    RiskLevel,
+)
 from src.core.knowledge import InMemoryKnowledgeBase, KnowledgeEntry, KnowledgeQuery
 from src.core.strategy import RuleBasedPRStrategyEngine
 
@@ -141,3 +150,109 @@ def test_strategy_skips_low_signal_doc_groups_for_step3_test_actions() -> None:
     )
 
     assert result.actions == ()
+
+
+def test_strategy_includes_current_head_ci_failure_without_mixing_stale_history() -> None:
+    impact = BehaviourImpact(
+        summary="Changed payment API",
+        areas=(
+            ImpactArea(
+                module="src/api",
+                description="modified src/api/payments.py",
+                risk_level=RiskLevel.MEDIUM,
+                affected_files=("src/api/payments.py",),
+            ),
+        ),
+        overall_risk=RiskLevel.MEDIUM,
+    )
+    ci_feedback = CIFeedbackContext(
+        current_head_sha="sha-current",
+        readiness=CIReadinessState.CHECKS_FAILED,
+        current_observations=(
+            CIObservation(
+                workflow_name="Tests",
+                conclusion="failure",
+                run_url="https://github.com/acme/web/actions/runs/1",
+                failed_jobs=("pytest", "mypy"),
+                commit_sha="sha-current",
+            ),
+        ),
+        historical_evidence=(
+            CIHistoricalEvidence(
+                head_sha="sha-old",
+                observations=(
+                    CIObservation(
+                        workflow_name="Tests",
+                        conclusion="failure",
+                        run_url="https://github.com/acme/web/actions/runs/0",
+                        failed_jobs=("pytest",),
+                        commit_sha="sha-old",
+                    ),
+                ),
+            ),
+        ),
+    )
+
+    result = RuleBasedPRStrategyEngine().plan(
+        repo_full_name="acme-corp/web-api",
+        pr_number=123,
+        title="feat: update payment API",
+        impact=impact,
+        ci_feedback=ci_feedback,
+    )
+
+    ci_actions = [action for action in result.actions if action.target.startswith("ci:")]
+    assert [(action.action_type, action.target, action.priority) for action in ci_actions] == [
+        (ActionType.RUN_TESTS, "ci:Tests", 4),
+        (ActionType.RUN_TESTS, "ci:Tests/pytest", 5),
+        (ActionType.TYPE_CHECK, "ci:Tests/mypy", 5),
+    ]
+    assert "current-head CI/check feedback: Tests=failure" in result.reasoning
+    assert "failed jobs: pytest, mypy" in result.reasoning
+    assert "historical CI evidence on superseded heads: sha-old: Tests=failure" in result.reasoning
+    assert "source of truth: sha-current" in result.reasoning
+
+
+def test_strategy_represents_success_cancelled_timed_out_and_pending_ci_feedback() -> None:
+    impact = BehaviourImpact(summary="Changed runtime worker", areas=(), overall_risk=RiskLevel.LOW)
+    ci_feedback = CIFeedbackContext(
+        current_head_sha="sha-current",
+        readiness=CIReadinessState.WAITING_FOR_CHECKS,
+        current_observations=(
+            CIObservation(
+                workflow_name="Tests",
+                conclusion="success",
+                run_url="https://github.com/acme/web/actions/runs/2",
+                commit_sha="sha-current",
+            ),
+            CIObservation(
+                workflow_name="Deploy",
+                conclusion="cancelled",
+                run_url="https://github.com/acme/web/actions/runs/3",
+                commit_sha="sha-current",
+            ),
+            CIObservation(
+                workflow_name="E2E",
+                conclusion="timed_out",
+                run_url="https://github.com/acme/web/actions/runs/4",
+                failed_jobs=("browser",),
+                commit_sha="sha-current",
+            ),
+        ),
+        pending_checks=("Security",),
+    )
+
+    result = RuleBasedPRStrategyEngine().plan(
+        repo_full_name="acme-corp/web-api",
+        pr_number=124,
+        title="feat: update worker",
+        impact=impact,
+        ci_feedback=ci_feedback,
+    )
+
+    assert "Tests=success" in result.reasoning
+    assert "Deploy=cancelled" in result.reasoning
+    assert "E2E=timed_out" in result.reasoning
+    assert "pending checks: Security" in result.reasoning
+    assert any(action.target == "ci:E2E/browser" and action.priority == 5 for action in result.actions)
+    assert any(action.target == "ci:Deploy" and action.priority == 3 for action in result.actions)

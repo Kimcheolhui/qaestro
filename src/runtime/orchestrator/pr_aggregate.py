@@ -6,7 +6,14 @@ from dataclasses import dataclass, field, replace
 from enum import StrEnum
 
 from src.adapters.connectors.github import CheckRunResult
-from src.core.contracts import CICompleted, PREvent
+from src.core.contracts import (
+    CICompleted,
+    CIFeedbackContext,
+    CIHistoricalEvidence,
+    CIObservation,
+    CIReadinessState,
+    PREvent,
+)
 
 
 class PRRevisionStatus(StrEnum):
@@ -240,6 +247,39 @@ class PRAggregateState:
             summary="Current-head checks are complete; final review can be published.",
         )
 
+    def to_ci_feedback_context(
+        self,
+        *,
+        readiness: ReviewReadiness,
+        current_check_snapshot: tuple[CheckRunSnapshot, ...] = (),
+    ) -> CIFeedbackContext:
+        """Export aggregate CI/check evidence as Strategy Engine input."""
+        current_revision = self.current_revision
+        historical = tuple(
+            CIHistoricalEvidence(
+                head_sha=revision.head_sha,
+                observations=tuple(_ci_observation_from_record(record) for record in revision.ci_runs),
+            )
+            for revision in self.revisions.values()
+            if revision.head_sha != self.current_head_sha and revision.ci_runs
+        )
+        return CIFeedbackContext(
+            current_head_sha=self.current_head_sha,
+            readiness=_ci_readiness_state_from(readiness.state),
+            current_observations=_merge_current_observations(
+                tuple(_ci_observation_from_record(record) for record in current_revision.ci_runs),
+                tuple(
+                    _ci_observation_from_check(check)
+                    for check in current_check_snapshot
+                    if check.head_sha == self.current_head_sha
+                ),
+            ),
+            historical_evidence=historical,
+            pending_checks=readiness.blocking_checks
+            if readiness.state is ReviewReadinessState.WAITING_FOR_CHECKS
+            else (),
+        )
+
 
 class InMemoryPRAggregateStore:
     """Minimal in-memory store for deterministic tests and future worker wiring."""
@@ -289,6 +329,62 @@ def _normalize_check_run_status(status: CheckRunStatus | str) -> CheckRunStatus:
         return CheckRunStatus(normalized)
     except ValueError:
         return CheckRunStatus.UNKNOWN
+
+
+def _ci_observation_from_record(record: CIWorkflowRunRecord) -> CIObservation:
+    return CIObservation(
+        workflow_name=record.workflow_name,
+        conclusion=record.conclusion,
+        run_url=record.run_url,
+        failed_jobs=record.failed_jobs,
+        commit_sha=record.commit_sha,
+    )
+
+
+def _ci_observation_from_check(check: CheckRunSnapshot) -> CIObservation:
+    return CIObservation(
+        workflow_name=check.name,
+        conclusion=check.conclusion or str(check.status),
+        run_url="",
+        failed_jobs=(check.name,) if check.is_failure else (),
+        commit_sha=check.head_sha,
+    )
+
+
+def _merge_current_observations(
+    records: tuple[CIObservation, ...],
+    checks: tuple[CIObservation, ...],
+) -> tuple[CIObservation, ...]:
+    merged = list(records)
+    seen = {(item.workflow_name, item.commit_sha) for item in records}
+    recorded_failed_jobs = {
+        (record.commit_sha, failed_job)
+        for record in records
+        for failed_job in record.failed_jobs
+        if record.commit_sha and failed_job
+    }
+    for check in checks:
+        key = (check.workflow_name, check.commit_sha)
+        # GitHub exposes workflow_run records and check-run snapshots at
+        # different granularities: the workflow name can be "CI", while the
+        # check-run name is the failed job, e.g. "pytest". When the workflow
+        # record already names that failed job, keep the workflow-level
+        # observation as the canonical current-head evidence and avoid adding a
+        # duplicate job-level check observation for the same commit.
+        failed_job_key = (check.commit_sha, check.workflow_name)
+        if key in seen or failed_job_key in recorded_failed_jobs:
+            continue
+        merged.append(check)
+        seen.add(key)
+    return tuple(merged)
+
+
+def _ci_readiness_state_from(state: ReviewReadinessState) -> CIReadinessState:
+    if state is ReviewReadinessState.WAITING_FOR_CHECKS:
+        return CIReadinessState.WAITING_FOR_CHECKS
+    if state is ReviewReadinessState.CHECKS_FAILED:
+        return CIReadinessState.CHECKS_FAILED
+    return CIReadinessState.READY
 
 
 def _append_unique(values: tuple[str, ...], value: str) -> tuple[str, ...]:
