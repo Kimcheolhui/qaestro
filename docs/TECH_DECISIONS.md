@@ -51,6 +51,8 @@ qaestro의 autonomy model은 완전 자율 agent가 아니라, **bounded tool au
 
 Step 3.5의 ToolRuntime 전환은 이 방향을 코드 경계로 고정하기 위한 중간 단계다. 외부 webhook input event는 계속 gateway가 normalized event로 변환하며, tool call로 대체하지 않는다. GitHub backend도 당분간 기존 GitHub Client API adapter를 유지한다. 이번 결정의 핵심은 API transport를 CLI로 바꾸는 것이 아니라, `Worker`/workflow가 `GitHubClient`, PR context provider, comment poster 같은 concrete read/write dependency를 직접 들고 있지 않도록 narrow tool capability 뒤로 이동시키는 것이다. Agent Framework runner가 들어오기 전까지 tool 선택은 deterministic sequence로 구현해도 되지만, 모든 read/write는 같은 `ToolRuntime` contract와 stage allowlist를 통과해야 한다.
 
+#46의 Agent Framework 정렬은 SDK full integration이 아니라 adapter seam으로 제한한다. `src.runtime.tools.agent_framework`는 Microsoft Agent Framework의 function/tool calling model에 넘길 수 있는 framework-neutral tool spec을 만들되, stage policy가 허용한 tool만 노출한다. 실제 호출도 runner가 raw handler를 직접 실행하지 않고 `ToolRuntime.execute()`를 통과해야 하므로 qaestro의 stage policy, audit, correlation/idempotency 경계가 유지된다. 구체 SDK 객체 import, LLM 기반 tool selection, validation probe 실행은 후속 Step 5 범위에서 다룬다.
+
 ### 5. PR review lifecycle: deferred unified review + manual trigger first
 
 qaestro는 PR opened, PR synchronize, workflow_run completed, GitHub comment/review, ChatOps mention을 별도 이벤트로 수신하되, 판단과 출력은 PR 단위 aggregate state에서 종합한다. 권장 MVP는 manual-trigger first다. 사용자가 PR 또는 channel에서 `@qaestro review`처럼 명시적으로 요청하면 current PR aggregate를 만들고, current `head_sha` 기준 CI/check snapshot을 확인한 뒤 가능한 경우 unified review를 수행한다. 자동 리뷰는 이후 repo 설정으로 opt-in/optional하게 확장한다.

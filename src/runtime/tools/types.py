@@ -60,3 +60,5 @@ class ToolDefinition:
     name: str
     capabilities: tuple[ToolCapability, ...]
     handler: ToolHandler
+    description: str = ""
+    input_schema: Mapping[str, Any] | None = None

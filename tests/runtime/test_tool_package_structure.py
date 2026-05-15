@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import src.runtime.tools as tools
+from src.runtime.tools.agent_framework import AgentFrameworkToolAdapter, AgentFrameworkToolSpec
 from src.runtime.tools.policy import StageToolPolicy, ToolPolicyError
 from src.runtime.tools.runtime import RegisteredToolRuntime, ToolNotFoundError, ToolRuntime
 from src.runtime.tools.types import ToolAuditEntry, ToolCall, ToolCapability, ToolDefinition, ToolResult
@@ -20,9 +21,12 @@ def test_runtime_tools_init_only_reexports_public_api() -> None:
     assert "from .types import" in source
     assert "from .policy import" in source
     assert "from .runtime import" in source
+    assert "from .agent_framework import" in source
 
 
 def test_runtime_tools_public_api_is_reexported_from_focused_modules() -> None:
+    assert tools.AgentFrameworkToolAdapter is AgentFrameworkToolAdapter
+    assert tools.AgentFrameworkToolSpec is AgentFrameworkToolSpec
     assert tools.ToolAuditEntry is ToolAuditEntry
     assert tools.ToolCall is ToolCall
     assert tools.ToolCapability is ToolCapability

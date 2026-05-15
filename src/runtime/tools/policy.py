@@ -25,6 +25,10 @@ class StageToolPolicy:
         self._allowed_tools_by_stage = {stage: frozenset(tools) for stage, tools in allowed_tools_by_stage.items()}
         self._allow_destructive = allow_destructive
 
+    def allowed_tool_names(self, stage: WorkflowStage) -> tuple[str, ...]:
+        """Return tool names explicitly exposed to an agent runner for a stage."""
+        return tuple(sorted(self._allowed_tools_by_stage.get(stage, frozenset())))
+
     def check(self, call: ToolCall, definition: ToolDefinition) -> None:
         allowed_tools = self._allowed_tools_by_stage.get(call.stage, frozenset())
         if call.name not in allowed_tools:

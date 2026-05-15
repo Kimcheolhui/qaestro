@@ -82,3 +82,16 @@ def test_registered_tool_runtime_denies_destructive_tools_by_default() -> None:
         )
 
     assert runtime.audit_log == ()
+
+
+def test_stage_tool_policy_exposes_allowed_tool_names_without_mutation() -> None:
+    policy = StageToolPolicy(
+        {
+            WorkflowStage.CONTEXT: ("demo.z", "demo.a"),
+            WorkflowStage.OUTPUT: ("demo.write",),
+        }
+    )
+
+    assert policy.allowed_tool_names(WorkflowStage.CONTEXT) == ("demo.a", "demo.z")
+    assert policy.allowed_tool_names(WorkflowStage.OUTPUT) == ("demo.write",)
+    assert policy.allowed_tool_names(WorkflowStage.VALIDATOR) == ()
