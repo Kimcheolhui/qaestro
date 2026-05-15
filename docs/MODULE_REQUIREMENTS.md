@@ -605,19 +605,21 @@ qaestro를 구현할 때 참고할 수 있는 모듈 단위 요구사항 문서.
 | 3    | GitHub PR 분석 vertical slice     | `core/analyzer`, `core/strategy`, `core/knowledge`(interface+mock), `adapters/renderers`                 | PR 오픈 시 Behaviour Impact Report 자동 생성                    |
 | 3.5  | Tool Runtime 경계 정리            | `runtime/tools`, `runtime/orchestrator`, `adapters/connectors`(GitHub), `app/worker`                     | PR read/write가 stage policy를 거친 ToolRuntime으로 실행        |
 | 4    | CI 결과 피드백 루프               | `runtime/orchestrator`, `runtime/tools`, `core/strategy`, `adapters/renderers`                           | PR/CI/check를 PR aggregate로 묶고, current head 기준 unified review 가능 |
-| 5    | Runtime Validation MVP            | `runtime/validator`, `runtime/tools`, Microsoft Agent Framework 연결                                     | 선택된 PR에 대해 runtime validation 실행 및 결과 반영           |
-| 6    | ChatOps 흐름 연결                 | `app/gateway`(chat), `runtime/tools`, `adapters/connectors`(ChatOps), `adapters/renderers`               | `@qaestro` 호출 시 전략 제안, PR 맥락과 연결                    |
-| 7    | Knowledge Store 실 adapter 적용   | `adapters/knowledge`, `core/strategy`                                                                    | 실제 backing store 연결, 과거 패턴 조회 가능, adapter 교체 가능 |
-| 8    | CLI와 self-hosted 설치 흐름       | `app/cli`                                                                                                | repo 소스 이해 없이 CLI로 설치/실행 가능                        |
-| 9    | 운영 안정화 및 베타 준비          | telemetry, permission, 문서                                                                              | 내부 dogfooding 또는 design partner 테스트 가능                 |
+| 5    | Agent Runtime Foundation          | `shared/config`, `runtime/agent`, `app/worker`, `runtime/tools`, Microsoft Agent Framework 연결          | provider/session/runner 설정이 가능하고 fake/real provider 경계가 테스트 가능 |
+| 6    | Runtime Validation MVP            | `runtime/validator`, `runtime/tools`, Agent Runtime runner 연결                                          | 선택된 PR에 대해 runtime validation 실행 및 결과 반영           |
+| 7    | ChatOps 흐름 연결                 | `app/gateway`(chat), `runtime/tools`, `adapters/connectors`(ChatOps), `adapters/renderers`               | `@qaestro` 호출 시 전략 제안, PR 맥락과 연결                    |
+| 8    | Knowledge Store 실 adapter 적용   | `adapters/knowledge`, `core/strategy`                                                                    | 실제 backing store 연결, 과거 패턴 조회 가능, adapter 교체 가능 |
+| 9    | CLI와 self-hosted 설치 흐름       | `app/cli`                                                                                                | repo 소스 이해 없이 CLI로 설치/실행 가능                        |
+| 10   | 운영 안정화 및 베타 준비          | telemetry, permission, 문서                                                                              | 내부 dogfooding 또는 design partner 테스트 가능                 |
 
 ### 병렬 개발 권장 구간
 
 - Step 0 ~ 2는 가급적 순차 진행
 - Step 3부터는 `core/analyzer`, `core/strategy`, `adapters/renderers`를 병렬 진행 가능
-- Step 5와 Step 6은 공통 orchestration이 잡힌 뒤 병렬 진행 가능
-- Step 7(`adapters/knowledge`)은 Step 5 ~ 6과 병렬 진행 가능 (`core/knowledge` interface는 Step 3에서 확보됨)
-- Step 8 ~ 9는 제품 기능이 일정 수준 붙은 뒤 진행
+- Step 5는 Step 6 Runtime Validation보다 먼저 진행한다. Agent session/provider/runner 준비 없이 validation workflow만 쌓으면 실제 실행 경로가 늦게 흔들린다.
+- Step 6과 Step 7은 Agent Runtime Foundation과 공통 orchestration이 잡힌 뒤 병렬 진행 가능
+- Step 8(`adapters/knowledge`)은 Step 6 ~ 7과 병렬 진행 가능 (`core/knowledge` interface는 Step 3에서 확보됨)
+- Step 9 ~ 10은 제품 기능이 일정 수준 붙은 뒤 진행
 
 ### 권장 마일스톤
 
@@ -625,9 +627,10 @@ qaestro를 구현할 때 참고할 수 있는 모듈 단위 요구사항 문서.
 | -------------------------- | ------------- | ----------------------------------------- |
 | A. GitHub-only 분석 MVP    | Step 0 ~ 4    | PR과 CI 결과에 대해 구조화된 QA 코멘트    |
 | A-1. Tool Runtime 경계     | Step 3.5      | read/write/validation tool boundary 정리  |
-| B. Runtime Validation MVP  | Step 5        | 전략 판단을 실제 runtime 검증까지 연결    |
-| C. ChatOps + Knowledge MVP | Step 6 ~ 7    | 채널 호출과 지식 조회를 포함한 협업 흐름  |
-| D. Self-hosted 베타        | Step 8 ~ 9    | CLI 기반 설치와 내부 운영 가능            |
+| B. Agent Runtime Foundation | Step 5       | provider/session/runner 기반 실행 준비    |
+| C. Runtime Validation MVP  | Step 6        | 전략 판단을 실제 runtime 검증까지 연결    |
+| D. ChatOps + Knowledge MVP | Step 7 ~ 8    | 채널 호출과 지식 조회를 포함한 협업 흐름  |
+| E. Self-hosted 베타        | Step 9 ~ 10   | CLI 기반 설치와 내부 운영 가능            |
 
 ### 각 단계의 Definition of Done
 

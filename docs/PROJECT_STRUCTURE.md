@@ -117,7 +117,7 @@ adapters.knowledge  → core.knowledge, shared
 ### `app/`
 
 - `app/gateway`: GitHub, Slack/Teams에서 들어오는 payload를 받아 공통 이벤트로 normalize
-- `app/worker`: `runtime/orchestrator`를 실행하는 background processing entrypoint이자 Microsoft Agent Framework runner host
+- `app/worker`: `runtime/orchestrator`를 실행하는 background processing entrypoint이자 Agent Runtime/Microsoft Agent Framework runner host
 - `app/cli`: 로컬 replay, fixture 실행, 수동 검증용 엔트리포인트. GitHub App manifest, ChatOps app 설정 등 설치 매니페스트도 CLI 리소스로 관리
 
 ### `core/`
@@ -130,6 +130,7 @@ adapters.knowledge  → core.knowledge, shared
 ### `runtime/`
 
 - `runtime/orchestrator`: Event Router, correlation id, PR/채널/CI 맥락 묶기, workflow state 관리
+- `runtime/agent`: BYOK provider/session 설정, runner factory, fake/real provider 경계를 관리하는 Agent Runtime foundation
 - `runtime/validator`: 실제 런타임 검증 실행. MVP는 `api_contract`, `ui_flow` probe부터 시작
 
 ### `adapters/`
@@ -191,6 +192,7 @@ tests/replay/
 아래는 MVP 이후 시점에 확장한다.
 
 ```text
+src/runtime/agent/          # P1
 src/runtime/validator/      # P1
 src/adapters/connectors/    # ChatOps, LLM connector (P1)
 src/adapters/knowledge/     # concrete backing store adapter (P1)
@@ -202,7 +204,8 @@ tests/e2e/
 
 - 채널/provider별 코드는 `app/gateway`에 박아 넣기보다 `adapters/connectors/`로 분리하는 편이 확장에 유리하다.
 - 고객별 QA knowledge는 `core/knowledge` port 뒤로 숨기고, 실제 저장소 구현은 `adapters/knowledge`로 미루는 편이 현재 배포 모델과 맞다.
+- Agent Runtime은 `runtime/agent`로 분리해 provider/session/runner 준비를 먼저 다룬다. validation workflow는 이 foundation 없이 먼저 확장하지 않는다.
 - Runtime Validation은 `runtime/validator`로 분리해야 이후 DB 정합성, 성능, multi-step behaviour probe를 붙이기 쉽다.
-- Agent Framework 전용 객체 타입과 설정은 `app/worker`와 `runtime/*` 근처에 두고, `core/*`에는 직접 퍼뜨리지 않는다.
+- Agent Framework 전용 객체 타입과 설정은 `app/worker`와 `runtime/agent` 근처에 두고, `core/*`에는 직접 퍼뜨리지 않는다.
 - `tests/replay/`는 이 프로젝트의 성격상 중요하다. 단순 unit test보다 실제 event bundle replay가 더 많은 가치를 준다.
 - GitHub App manifest, ChatOps app 설정 등 설치 매니페스트는 `app/cli`가 참조하는 리소스로 관리한다. 설치 = CLI가 전부 책임지는 구조.

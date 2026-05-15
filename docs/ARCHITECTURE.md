@@ -113,12 +113,15 @@ normalized event
 | Context acquisition | PR metadata/diff/files, PR comments/reviews, CI workflow/run jobs, 관련 chat thread, knowledge read | `github.pr.view`, `github.pr.files`, `github.pr.diff`, `github.actions.run.jobs` |
 | Triage / readiness | 수집된 PR·CI·check context를 바탕으로 workflow depth와 final review 가능 여부 결정 | `PRWorkflowTriage`, current head check snapshot |
 | Analysis / strategy | 수집된 context, knowledge read, 제한된 추가 조회 | `knowledge.search` |
-| Validation | strategy가 선택한 runtime probe/test execution | 이후 Step 5에서 runtime probe tool 추가 |
+| Agent runtime | provider/session/runner 생성, LLM-backed tool selection 준비 | Step 5에서 BYOK provider 설정과 runner factory 추가 |
+| Validation | strategy가 선택한 runtime probe/test execution | 이후 Step 6에서 runtime probe tool 추가 |
 | Output | PR managed comment, PR review/inline comment, chat response 같은 write action | `github.pr.comment.create_or_update`, 이후 `github.pr.review.create` |
 
 Read tool은 맥락 수집과 판단을 돕기 위해 비교적 넓게 허용할 수 있지만, write tool은 output policy를 거쳐야 한다. destructive action은 기본 금지이며, comment 작성·knowledge write 같은 side effect는 correlation id와 중복 방지 정책을 함께 고려한다.
 
 Step 3.5에서는 GitHub backend를 기존 GitHub Client API adapter로 유지하고, raw shell/CLI를 열지 않는다. 목표는 transport 교체가 아니라 `Worker`/workflow가 GitHub-specific provider나 poster를 직접 잡지 않도록 read/write 실행 경계를 `ToolRuntime` 뒤로 옮기는 것이다. Agent Framework runner가 들어오기 전까지 tool 선택은 deterministic sequence로 시작하되, 같은 tool contract와 stage policy 위에서 나중에 agent 선택으로 교체할 수 있어야 한다.
+
+Step 5는 그 교체 가능성을 실제 실행 준비 상태로 만드는 단계다. `app/worker`는 Agent Runtime host가 되지만, Microsoft Agent Framework SDK 객체와 provider SDK 객체는 adapter/factory 밖으로 새지 않아야 한다. `shared/config`는 BYOK 기반 provider/session 설정을 typed config로 읽고, `runtime/agent`는 fake provider와 real provider를 같은 runner contract 뒤에 둔다. Step 6의 runtime validation은 이 foundation 위에서 validation stage에 허용된 tool과 probe만 노출한다.
 
 ### PR aggregate lifecycle
 
