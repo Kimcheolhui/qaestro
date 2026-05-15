@@ -6,6 +6,10 @@ from src.adapters.renderers import GitHubPRCommentRenderer, PRCommentPayload
 from src.core.contracts import (
     ActionType,
     BehaviourImpact,
+    CIFeedbackContext,
+    CIHistoricalEvidence,
+    CIObservation,
+    CIReadinessState,
     ImpactArea,
     QAReport,
     RiskLevel,
@@ -151,3 +155,97 @@ def test_github_pr_comment_renderer_lists_triaged_execution_stages_precisely() -
     assert "Overall risk: **MEDIUM**" in payload.body
     assert "Triaged analysis/validation stages: `analyzer, strategy, validator`" in payload.body
     assert "Allowed stages after triage" not in payload.body
+
+
+def test_github_pr_comment_renderer_surfaces_ci_feedback_as_distinct_section() -> None:
+    report = _qa_report()
+    ci_feedback = CIFeedbackContext(
+        current_head_sha="abc123",
+        readiness=CIReadinessState.CHECKS_FAILED,
+        current_observations=(
+            CIObservation(
+                workflow_name="Qaestro Smoke CI",
+                conclusion="failure",
+                run_url="https://github.com/Kimcheolhui/qaestro/actions/runs/100",
+                logs_url="https://github.com/Kimcheolhui/qaestro/actions/runs/100/job/200",
+                failed_jobs=("qaestro-smoke",),
+                commit_sha="abc123",
+            ),
+            CIObservation(
+                workflow_name="GitGuardian Security Checks",
+                conclusion="success",
+                run_url="https://dashboard.gitguardian.com/checks/1",
+                commit_sha="abc123",
+            ),
+        ),
+        historical_evidence=(
+            CIHistoricalEvidence(
+                head_sha="old123",
+                observations=(
+                    CIObservation(
+                        workflow_name="Tests",
+                        conclusion="failure",
+                        run_url="https://github.com/Kimcheolhui/qaestro/actions/runs/99",
+                        failed_jobs=("pytest",),
+                        commit_sha="old123",
+                    ),
+                ),
+            ),
+        ),
+        pending_checks=("Type Check (Mypy)",),
+    )
+
+    payload = GitHubPRCommentRenderer().render(
+        report,
+        correlation_id="corr-ci-feedback",
+        ci_feedback=ci_feedback,
+    )
+
+    assert "### CI / Check Feedback" in payload.body
+    assert "Current head: `abc123`" in payload.body
+    assert "Readiness: **CHECKS FAILED**" in payload.body
+    assert "Qaestro Smoke CI" in payload.body
+    assert "failure" in payload.body
+    assert "failed jobs: `qaestro-smoke`" in payload.body
+    assert "[run](https://github.com/Kimcheolhui/qaestro/actions/runs/100)" in payload.body
+    assert "[logs](https://github.com/Kimcheolhui/qaestro/actions/runs/100/job/200)" in payload.body
+    assert "GitGuardian Security Checks" in payload.body
+    assert "Pending checks: `Type Check (Mypy)`" in payload.body
+    assert "Historical CI evidence from superseded heads" in payload.body
+    assert "old123" in payload.body
+
+
+def test_github_pr_comment_renderer_omits_ci_feedback_section_when_absent() -> None:
+    payload = GitHubPRCommentRenderer().render(_qa_report(), correlation_id="corr-no-ci")
+
+    assert "### CI / Check Feedback" not in payload.body
+
+
+def test_github_pr_comment_renderer_escapes_ci_feedback_markdown_text() -> None:
+    ci_feedback = CIFeedbackContext(
+        current_head_sha="sha`with`tick",
+        readiness=CIReadinessState.CHECKS_FAILED,
+        current_observations=(
+            CIObservation(
+                workflow_name="CI [spoof](https://example.invalid)",
+                conclusion="failure",
+                run_url="https://github.com/Kimcheolhui/qaestro/actions/runs/100",
+                failed_jobs=("job `with` tick", "job [spoof](https://example.invalid)"),
+                commit_sha="sha`with`tick",
+            ),
+        ),
+        pending_checks=("pending `quoted`", "multi `` ticks", "`edge`"),
+    )
+
+    payload = GitHubPRCommentRenderer().render(
+        _qa_report(),
+        correlation_id="corr-ci-escaping",
+        ci_feedback=ci_feedback,
+    )
+
+    assert "Current head: ``sha`with`tick``" in payload.body
+    assert "**CI \\[spoof](https://example.invalid)**" in payload.body
+    assert "``job `with` tick``" in payload.body
+    assert "`job [spoof](https://example.invalid)`" in payload.body
+    assert "Pending checks: `` pending `quoted` ``, ```multi `` ticks```" in payload.body
+    assert "`` `edge` ``" in payload.body

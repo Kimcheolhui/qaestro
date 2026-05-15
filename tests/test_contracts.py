@@ -559,3 +559,16 @@ class TestQAReport:
         assert report.pr_number == 123
         assert len(report.validations) == 1
         assert report.validations[0].outcome == ValidationOutcome.PASS
+
+    def test_ci_feedback_defaults_to_none(self):
+        report = QAReport(
+            event_id="evt-001",
+            repo_full_name="acme-corp/web-api",
+            pr_number=123,
+            impact=BehaviourImpact(summary="Docs", areas=(), overall_risk=RiskLevel.LOW),
+            strategy=StrategyResult(actions=(), reasoning="No runtime action needed", confidence=0.8),
+            validations=(),
+            summary_markdown="Docs changed.",
+        )
+
+        assert report.ci_feedback is None

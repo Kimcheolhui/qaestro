@@ -95,6 +95,7 @@ class PRWorkflowOrchestrator:
         impact = self._analyzer.analyze(context)
 
         strategy: StrategyResult
+        ci_feedback: CIFeedbackContext | None = None
         if triage.runs_strategy:
             stages.append(WorkflowStage.STRATEGY)
             ci_feedback = self._ci_feedback_provider(event) if self._ci_feedback_provider is not None else None
@@ -125,6 +126,7 @@ class PRWorkflowOrchestrator:
             strategy=strategy,
             validations=validations,
             summary_markdown=impact.summary,
+            ci_feedback=ci_feedback,
         )
         stage_order = (*stages, WorkflowStage.RENDERER)
         draft = PRWorkflowDraft(event=event, report=report, triage=triage, stage_order=stage_order)
@@ -145,7 +147,12 @@ class _DefaultDraftRenderer:
         self._renderer = GitHubPRCommentRenderer()
 
     def render(self, draft: PRWorkflowDraft) -> PRCommentPayload:
-        return self._renderer.render(draft.report, correlation_id=draft.correlation_id, triage=draft.triage)
+        return self._renderer.render(
+            draft.report,
+            correlation_id=draft.correlation_id,
+            triage=draft.triage,
+            ci_feedback=draft.report.ci_feedback,
+        )
 
 
 class StubPRRuntimeValidator:

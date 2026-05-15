@@ -211,3 +211,4 @@ class QAReport:
     strategy: StrategyResult
     validations: tuple[ValidationResult, ...]
     summary_markdown: str
+    ci_feedback: CIFeedbackContext | None = None
