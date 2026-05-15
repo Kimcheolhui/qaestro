@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from src.core.contracts import QAReport
+from src.core.contracts import CIFeedbackContext, CIHistoricalEvidence, CIObservation, QAReport
 
 if TYPE_CHECKING:
     from src.runtime.orchestrator.pr_triage import PRWorkflowTriage
@@ -33,9 +33,11 @@ class GitHubPRCommentRenderer:
         *,
         correlation_id: str,
         triage: PRWorkflowTriage | None = None,
+        ci_feedback: CIFeedbackContext | None = None,
     ) -> PRCommentPayload:
         if report.pr_number is None:
             raise ValueError("PR comment renderer requires report.pr_number")
+        ci_feedback = ci_feedback if ci_feedback is not None else report.ci_feedback
 
         body = "\n".join(
             [
@@ -52,6 +54,7 @@ class GitHubPRCommentRenderer:
                 "",
                 "### Diff Stats",
                 *_diff_stat_lines(report),
+                *_ci_feedback_section(ci_feedback),
                 "",
                 "### Impact Areas",
                 *_impact_lines(report),
@@ -129,6 +132,84 @@ def _status_counts(stats: dict[str, int]) -> list[tuple[str, int]]:
 
 def _status_label(key: str) -> str:
     return key.removeprefix("files_").replace("_", " ")
+
+
+def _ci_feedback_section(ci_feedback: CIFeedbackContext | None) -> list[str]:
+    """Render already-produced CI/check facts without making strategy decisions."""
+    if ci_feedback is None:
+        return []
+    lines = [
+        "",
+        "### CI / Check Feedback",
+        f"- Current head: {_inline_code_span(ci_feedback.current_head_sha)}",
+        f"- Readiness: **{_markdown_text(ci_feedback.readiness.value.replace('_', ' ').upper())}**",
+    ]
+    if ci_feedback.pending_checks:
+        lines.append("- Pending checks: " + ", ".join(_inline_code_span(check) for check in ci_feedback.pending_checks))
+    if ci_feedback.current_observations:
+        lines.append("- Current-head observations:")
+        lines.extend(f"  - {_ci_observation_line(observation)}" for observation in ci_feedback.current_observations)
+    else:
+        lines.append("- Current-head observations: none recorded.")
+    historical_lines = _historical_ci_lines(ci_feedback.historical_evidence)
+    if historical_lines:
+        lines.append("- Historical CI evidence from superseded heads:")
+        lines.extend(historical_lines)
+    return lines
+
+
+def _ci_observation_line(observation: CIObservation) -> str:
+    conclusion = _inline_code_span(observation.conclusion.strip().lower() or "unknown")
+    line = f"**{_markdown_text(observation.workflow_name)}** — {conclusion}"
+    if observation.failed_jobs:
+        line += "; failed jobs: " + ", ".join(_inline_code_span(job) for job in observation.failed_jobs)
+    links = _ci_observation_links(observation)
+    if links:
+        line += f" ({'; '.join(links)})"
+    return line
+
+
+def _ci_observation_links(observation: CIObservation) -> list[str]:
+    links: list[str] = []
+    if observation.run_url:
+        links.append(f"[run]({observation.run_url})")
+    if observation.logs_url:
+        links.append(f"[logs]({observation.logs_url})")
+    return links
+
+
+def _historical_ci_lines(evidence: tuple[CIHistoricalEvidence, ...]) -> list[str]:
+    lines: list[str] = []
+    for item in evidence:
+        if not item.observations:
+            continue
+        summary = "; ".join(_ci_observation_line(observation) for observation in item.observations)
+        lines.append(f"  - {_inline_code_span(item.head_sha)}: {summary}")
+    return lines
+
+
+def _inline_code_span(text: str) -> str:
+    """Return a Markdown inline-code span that can contain backticks safely."""
+    longest_run = _longest_backtick_run(text)
+    delimiter = "`" * (longest_run + 1)
+    if text.startswith("`") or text.endswith("`"):
+        return f"{delimiter} {text} {delimiter}"
+    return f"{delimiter}{text}{delimiter}"
+
+
+def _longest_backtick_run(text: str) -> int:
+    longest = current = 0
+    for char in text:
+        if char == "`":
+            current += 1
+            longest = max(longest, current)
+        else:
+            current = 0
+    return longest
+
+
+def _markdown_text(text: str) -> str:
+    return text.replace("[", "\\[").replace("*", "\\*").replace("_", "\\_")
 
 
 def _impact_lines(report: QAReport) -> list[str]:

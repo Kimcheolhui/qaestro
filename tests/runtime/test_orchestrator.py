@@ -378,6 +378,11 @@ def test_pr_workflow_orchestrator_passes_ci_feedback_to_strategy_engine() -> Non
 
     assert strategy_engine.ci_feedback == [ci_feedback]
     assert result.strategy.reasoning == "strategy saw ci feedback"
+    assert result.report.ci_feedback == ci_feedback
+    assert result.comment_payload is not None
+    assert "### CI / Check Feedback" in result.comment_payload.body
+    assert "Tests" in result.comment_payload.body
+    assert "failed jobs: `pytest`" in result.comment_payload.body
 
 
 def test_pr_workflow_orchestrator_can_skip_validation_via_policy_hook():
