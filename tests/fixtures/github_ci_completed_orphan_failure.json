@@ -1,0 +1,51 @@
+{
+  "action": "completed",
+  "workflow_run": {
+    "id": 5551234555,
+    "name": "Qaestro Smoke CI",
+    "head_branch": "main",
+    "head_sha": "orphan456deadbeef",
+    "status": "completed",
+    "conclusion": "failure",
+    "html_url": "https://github.com/acme-corp/web-api/actions/runs/5551234555",
+    "logs_url": "https://api.github.com/repos/acme-corp/web-api/actions/runs/5551234555/logs",
+    "run_number": 40,
+    "event": "push",
+    "created_at": "2025-01-15T09:10:00Z",
+    "updated_at": "2025-01-15T09:25:00Z",
+    "run_attempt": 1,
+    "pull_requests": [],
+    "actor": {
+      "login": "github-actions[bot]",
+      "id": 41898282
+    },
+    "workflow_id": 9877
+  },
+  "repository": {
+    "id": 999888,
+    "full_name": "acme-corp/web-api",
+    "name": "web-api",
+    "owner": {
+      "login": "acme-corp",
+      "id": 777666
+    },
+    "private": true,
+    "html_url": "https://github.com/acme-corp/web-api",
+    "default_branch": "main"
+  },
+  "sender": {
+    "login": "github-actions[bot]",
+    "id": 41898282,
+    "type": "Bot"
+  },
+  "failed_jobs": [
+    {
+      "id": 111222555,
+      "name": "qaestro-smoke",
+      "status": "completed",
+      "conclusion": "failure",
+      "started_at": "2025-01-15T09:12:00Z",
+      "completed_at": "2025-01-15T09:20:00Z"
+    }
+  ]
+}
