@@ -201,12 +201,14 @@ qaestro를 구현할 때 참고할 수 있는 모듈 단위 요구사항 문서.
 - GitHub backend는 기존 GitHub Client API adapter를 유지할 수 있어야 함
 - raw shell/CLI를 노출하지 않고, destructive action은 기본 금지해야 함
 - agent runner 도입 전에는 deterministic tool sequence로 실행 가능해야 함
+- Microsoft Agent Framework runner에는 모든 registered tool을 직접 넘기지 않고, 현재 `WorkflowStage`의 allowlist를 통과한 tool spec과 단일 invocation adapter만 제공해야 함
 
 **제외 범위**
 
 - 외부 webhook event ingestion 대체
 - GitHub backend를 CLI로 전환
 - LLM/Agent Framework 기반 tool selection 구현
+- Microsoft Agent Framework SDK 객체와 core/runtime contract의 직접 결합
 - runtime validation probe 전체 구현
 
 **선행 조건**
@@ -219,6 +221,7 @@ qaestro를 구현할 때 참고할 수 있는 모듈 단위 요구사항 문서.
 
 - PR context acquisition과 PR comment write가 ToolRuntime을 통해 실행 가능
 - workflow stage별 allowed tools가 코드에서 강제됨
+- Agent Framework-facing adapter seam이 stage-approved tool spec만 노출하고, 실제 호출은 `ToolRuntime.execute()`를 통과함
 - 기존 PR analysis vertical slice의 observable behavior가 유지됨
 
 ### 6. `app/worker`
