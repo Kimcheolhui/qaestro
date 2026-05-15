@@ -224,15 +224,42 @@ def _confidence(
     matches: tuple[KnowledgeEntry, ...],
     ci_feedback: CIFeedbackContext | None,
 ) -> float:
+    """Return the Step 4 placeholder confidence score.
+
+    This is not a calibrated probability and must not be read as "qaestro is
+    N% likely to be correct." The constants below are a deterministic
+    evidence-strength heuristic used only to keep the current StrategyResult
+    contract populated while the rule-based strategy engine is still a
+    temporary implementation.
+
+    Replacement direction:
+    - Replace the hand-picked constants with a typed confidence/evidence model
+      that records factors such as risk source, knowledge match strength, CI
+      signal freshness, CI outcome severity, and missing-signal penalties.
+    - Calibrate any numeric score from observed review/validation outcomes, or
+      remove the numeric field from decision-making and expose the factors for
+      policy ranking instead.
+    - Keep a conservative cap or explicit uncertainty band if a future Agent
+      Framework strategy engine still emits a scalar confidence value.
+    """
     if _is_high(risk):
+        # High-risk changes start lower because the rule-based engine has less
+        # context than a real validation loop. This value is intentionally
+        # arbitrary and should disappear when confidence is calibrated.
         base = 0.72
     elif risk is RiskLevel.MEDIUM:
         base = 0.76
     else:
         base = 0.82
     if matches:
+        # Knowledge hits are treated as a weak positive signal for now; future
+        # scoring should weight the relevance and historical reliability of the
+        # matched rule instead of blindly adding a constant.
         base += 0.02
     if ci_feedback is not None and (ci_feedback.current_observations or ci_feedback.pending_checks):
+        # CI/check feedback makes the strategy better grounded, but the current
+        # rule does not distinguish fresh failures, pending checks, skipped jobs,
+        # or flaky checks. A replacement should model those factors separately.
         base += 0.02
     return min(base, 0.9)
 
