@@ -357,9 +357,22 @@ def _merge_current_observations(
 ) -> tuple[CIObservation, ...]:
     merged = list(records)
     seen = {(item.workflow_name, item.commit_sha) for item in records}
+    recorded_failed_jobs = {
+        (record.commit_sha, failed_job)
+        for record in records
+        for failed_job in record.failed_jobs
+        if record.commit_sha and failed_job
+    }
     for check in checks:
         key = (check.workflow_name, check.commit_sha)
-        if key in seen:
+        # GitHub exposes workflow_run records and check-run snapshots at
+        # different granularities: the workflow name can be "CI", while the
+        # check-run name is the failed job, e.g. "pytest". When the workflow
+        # record already names that failed job, keep the workflow-level
+        # observation as the canonical current-head evidence and avoid adding a
+        # duplicate job-level check observation for the same commit.
+        failed_job_key = (check.commit_sha, check.workflow_name)
+        if key in seen or failed_job_key in recorded_failed_jobs:
             continue
         merged.append(check)
         seen.add(key)
