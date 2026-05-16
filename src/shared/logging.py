@@ -30,6 +30,9 @@ class _JsonFormatter(logging.Formatter):
         # Keep the whitelist explicit so logs stay predictable and don't leak
         # arbitrary objects.
         for key in (
+            "agent_runtime_provider",
+            "agent_runtime_status",
+            "agent_runtime_warnings",
             "attempts",
             "correlation_id",
             "delivery_id",

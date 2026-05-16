@@ -16,11 +16,12 @@ from ..jobs import (
     RedisStreamsJobQueue,
 )
 from .entrypoint import main
-from .factory import build_worker
+from .factory import AgentRuntimeUnavailableError, build_worker, check_worker_agent_runtime_health
 from .runner import NoopOutputPoster, Orchestrator, OutputPoster, Worker
 from .types import WorkerExecution, WorkerExecutionContext, WorkerStatus
 
 __all__ = [
+    "AgentRuntimeUnavailableError",
     "EnqueueQueue",
     "EventJob",
     "InMemoryJobQueue",
@@ -36,5 +37,6 @@ __all__ = [
     "WorkerExecutionContext",
     "WorkerStatus",
     "build_worker",
+    "check_worker_agent_runtime_health",
     "main",
 ]

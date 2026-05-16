@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .fake import FakeAgentRunner
+from .health import AgentRuntimeHealthResult, AgentRuntimeHealthStatus, check_agent_runtime_health
 from .manager import WorkflowAgentSessionManager
 from .types import (
     AgentRunInput,
@@ -19,6 +20,8 @@ __all__ = [
     "AgentRunInput",
     "AgentRunResult",
     "AgentRunStatus",
+    "AgentRuntimeHealthResult",
+    "AgentRuntimeHealthStatus",
     "AgentSessionHandle",
     "AgentSessionRecord",
     "AgentSessionScope",
@@ -26,4 +29,5 @@ __all__ = [
     "AgentSessionTurn",
     "FakeAgentRunner",
     "WorkflowAgentSessionManager",
+    "check_agent_runtime_health",
 ]

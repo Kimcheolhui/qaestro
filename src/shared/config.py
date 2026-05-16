@@ -41,6 +41,9 @@ class AgentRuntimeConfig:
     max_turns: int = 8
     max_tool_calls: int = 16
     temperature: float = 0.0
+    supports_tool_calling: bool = False
+    supports_structured_output: bool = False
+    context_window_tokens: int = 0
 
     def __repr__(self) -> str:
         credential = "<redacted>" if self.credential_env_var else ""
@@ -56,7 +59,10 @@ class AgentRuntimeConfig:
             f"timeout_seconds={self.timeout_seconds!r}, "
             f"max_turns={self.max_turns!r}, "
             f"max_tool_calls={self.max_tool_calls!r}, "
-            f"temperature={self.temperature!r}"
+            f"temperature={self.temperature!r}, "
+            f"supports_tool_calling={self.supports_tool_calling!r}, "
+            f"supports_structured_output={self.supports_structured_output!r}, "
+            f"context_window_tokens={self.context_window_tokens!r}"
             ")"
         )
 
@@ -167,6 +173,9 @@ _AGENT_ENV_MAP: dict[str, tuple[str, type[Any]]] = {
     "max_turns": ("AGENT_MAX_TURNS", int),
     "max_tool_calls": ("AGENT_MAX_TOOL_CALLS", int),
     "temperature": ("AGENT_TEMPERATURE", float),
+    "supports_tool_calling": ("AGENT_SUPPORTS_TOOL_CALLING", bool),
+    "supports_structured_output": ("AGENT_SUPPORTS_STRUCTURED_OUTPUT", bool),
+    "context_window_tokens": ("AGENT_CONTEXT_WINDOW_TOKENS", int),
 }
 
 
