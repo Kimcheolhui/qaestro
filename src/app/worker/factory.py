@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
 
 from src.adapters.connectors.github import GitHubAppAuth, GitHubClient
 from src.core.contracts import CIFeedbackContext, PREvent
+from src.runtime.agent import AgentRuntimeHealthResult, AgentRuntimeHealthStatus, check_agent_runtime_health
 from src.runtime.orchestrator import (
     CIWorkflowOrchestrator,
     EventOrchestrator,
@@ -23,6 +25,29 @@ from src.runtime.tools.github import build_github_pr_tools
 from src.shared.config import AppConfig
 
 from .runner import Worker
+
+
+class AgentRuntimeUnavailableError(RuntimeError):
+    """Raised when worker bootstrap rejects Agent Runtime configuration."""
+
+
+def check_worker_agent_runtime_health(
+    cfg: AppConfig,
+    *,
+    environ: Mapping[str, str] | None = None,
+    opt_in_live_smoke: bool = False,
+) -> AgentRuntimeHealthResult:
+    """Validate worker Agent Runtime readiness before validation stages use it."""
+
+    health = check_agent_runtime_health(
+        cfg.agent_runtime,
+        environ=environ,
+        opt_in_live_smoke=opt_in_live_smoke,
+    )
+    if health.status is AgentRuntimeHealthStatus.UNSUPPORTED:
+        detail = "; ".join(health.actionable_errors)
+        raise AgentRuntimeUnavailableError(f"Agent Runtime configuration is unsupported: {detail}")
+    return health
 
 
 def build_worker(cfg: AppConfig) -> Worker:

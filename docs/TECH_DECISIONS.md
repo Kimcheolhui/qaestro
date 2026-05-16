@@ -69,9 +69,11 @@ PR aggregate는 PR 전체 수명과 대화 history를 유지하고, 그 안에 `
 
 - `BYOK`를 전제로 설계
 - Agent Runtime 설정은 provider, model/deployment id, endpoint/base URL, credential reference, timeout, max turns/tool calls, temperature 같은 실행 예산을 명시적으로 표현해야 한다.
+- 최소 capability policy는 tool/function calling, structured output 또는 schema-constrained response, context window를 별도 설정으로 선언하게 한다. provider가 capability metadata를 안정적으로 주지 않는 경우에도 bootstrap에서 unsupported/degraded/supported 상태를 구분할 수 있어야 한다.
 - Azure OpenAI와 OpenAI-compatible provider는 설정 shape를 분리하되, core 계층은 특정 provider SDK type에 직접 종속되지 않도록 유지한다.
-- credential 값은 config object의 repr, log, report, issue output에 노출하지 않는다.
+- credential 값은 config object의 repr, log, report, issue output에 노출하지 않는다. health check error도 credential 값 대신 env var 이름과 조치 가능한 누락 항목만 보여준다.
 - provider 선택과 session 생성은 `app/worker` 또는 `runtime/agent` adapter/factory 경계에 두고, 테스트에서는 fake provider로 같은 contract를 검증한다.
+- worker bootstrap health check는 offline config/capability validation을 기본으로 하며, 비용이 발생할 수 있는 live provider smoke call은 명시 opt-in 경로로만 수행한다.
 
 ### 7. Queue backend: Redis Streams for process separation
 

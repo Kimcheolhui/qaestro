@@ -37,6 +37,9 @@ class TestAgentRuntimeConfig:
             "QAESTRO_AGENT_MAX_TURNS": "12",
             "QAESTRO_AGENT_MAX_TOOL_CALLS": "24",
             "QAESTRO_AGENT_TEMPERATURE": "0.2",
+            "QAESTRO_AGENT_SUPPORTS_TOOL_CALLING": "true",
+            "QAESTRO_AGENT_SUPPORTS_STRUCTURED_OUTPUT": "yes",
+            "QAESTRO_AGENT_CONTEXT_WINDOW_TOKENS": "64000",
         }
 
         with patch.dict(os.environ, env, clear=True):
@@ -54,6 +57,9 @@ class TestAgentRuntimeConfig:
             max_turns=12,
             max_tool_calls=24,
             temperature=0.2,
+            supports_tool_calling=True,
+            supports_structured_output=True,
+            context_window_tokens=64_000,
         )
 
     def test_agent_runtime_config_repr_redacts_credential_reference(self) -> None:
