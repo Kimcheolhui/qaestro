@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Protocol
 
+from src.runtime.agent.azure_openai import AzureOpenAIAgentRunner, AzureOpenAIChatClient
 from src.runtime.agent.health import AgentRuntimeHealthStatus, check_agent_runtime_health
 from src.runtime.agent.types import AgentRunInput, AgentRunner, AgentRunResult, AgentRunStatus, AgentSessionHandle
 from src.shared.config import AgentRuntimeConfig, AgentRuntimeProvider
@@ -102,6 +103,7 @@ def build_agent_runner(
     *,
     environ: Mapping[str, str] | None = None,
     openai_compatible_client: OpenAICompatibleChatClient | None = None,
+    azure_openai_client: AzureOpenAIChatClient | None = None,
 ) -> AgentRunner:
     """Build a provider-neutral runner from Agent Runtime configuration."""
 
@@ -118,6 +120,17 @@ def build_agent_runner(
         return OpenAICompatibleAgentRunner(
             config=config,
             client=openai_compatible_client,
+            credential=env.get(config.credential_env_var, ""),
+        )
+
+    if config.provider is AgentRuntimeProvider.AZURE_OPENAI:
+        if azure_openai_client is None:
+            raise UnsupportedAgentRuntimeProviderError(
+                "Azure OpenAI runner requires an injected client until a live adapter is configured."
+            )
+        return AzureOpenAIAgentRunner(
+            config=config,
+            client=azure_openai_client,
             credential=env.get(config.credential_env_var, ""),
         )
 

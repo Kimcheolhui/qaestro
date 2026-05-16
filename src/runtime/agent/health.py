@@ -26,6 +26,8 @@ class LiveSmokeProbeStatus(StrEnum):
 
     NOT_REQUESTED = "not_requested"
     NOT_IMPLEMENTED = "not_implemented"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
 
 
 @dataclass(frozen=True)

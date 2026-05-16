@@ -2,6 +2,14 @@
 
 from __future__ import annotations
 
+from .azure_openai import (
+    AzureOpenAIAgentRunner,
+    AzureOpenAIChatClient,
+    AzureOpenAIClientResponse,
+    AzureOpenAIHTTPClient,
+    AzureOpenAILiveSmokeResult,
+    run_azure_openai_live_smoke,
+)
 from .fake import FakeAgentRunner
 from .health import (
     AgentRuntimeHealthResult,
@@ -39,6 +47,11 @@ __all__ = [
     "AgentSessionScope",
     "AgentSessionStatus",
     "AgentSessionTurn",
+    "AzureOpenAIAgentRunner",
+    "AzureOpenAIChatClient",
+    "AzureOpenAIClientResponse",
+    "AzureOpenAIHTTPClient",
+    "AzureOpenAILiveSmokeResult",
     "FakeAgentRunner",
     "LiveSmokeProbeStatus",
     "OpenAICompatibleAgentRunner",
@@ -48,4 +61,5 @@ __all__ = [
     "WorkflowAgentSessionManager",
     "build_agent_runner",
     "check_agent_runtime_health",
+    "run_azure_openai_live_smoke",
 ]
