@@ -122,7 +122,7 @@ def _provider_config_errors(config: AgentRuntimeConfig, env: Mapping[str, str]) 
         if not config.model:
             errors.append("OpenAI-compatible model is required for QAESTRO_AGENT_MODEL.")
     elif config.provider is AgentRuntimeProvider.GITHUB_COPILOT:
-        errors.append("GitHub Copilot is not supported as a non-interactive Agent Runtime provider yet.")
+        return ("GitHub Copilot is not supported as a non-interactive Agent Runtime provider yet.",)
 
     if not config.credential_env_var:
         errors.append("Credential environment variable name is required for QAESTRO_AGENT_CREDENTIAL_ENV_VAR.")

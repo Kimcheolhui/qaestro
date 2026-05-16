@@ -53,6 +53,17 @@ def test_azure_openai_runtime_reports_missing_endpoint_deployment_api_version_an
     )
 
 
+def test_github_copilot_runtime_reports_unsupported_without_credential_requirement() -> None:
+    config = AgentRuntimeConfig(provider=AgentRuntimeProvider.GITHUB_COPILOT)
+
+    result = check_agent_runtime_health(config, environ={})
+
+    assert result.status is AgentRuntimeHealthStatus.UNSUPPORTED
+    assert result.actionable_errors == (
+        "GitHub Copilot is not supported as a non-interactive Agent Runtime provider yet.",
+    )
+
+
 def test_enabled_runtime_requires_declared_context_window() -> None:
     config = AgentRuntimeConfig(
         provider=AgentRuntimeProvider.OPENAI_COMPATIBLE,

@@ -10,6 +10,13 @@ from .health import (
     check_agent_runtime_health,
 )
 from .manager import WorkflowAgentSessionManager
+from .openai_compatible import (
+    OpenAICompatibleAgentRunner,
+    OpenAICompatibleChatClient,
+    OpenAICompatibleClientResponse,
+    UnsupportedAgentRuntimeProviderError,
+    build_agent_runner,
+)
 from .types import (
     AgentRunInput,
     AgentRunResult,
@@ -34,6 +41,11 @@ __all__ = [
     "AgentSessionTurn",
     "FakeAgentRunner",
     "LiveSmokeProbeStatus",
+    "OpenAICompatibleAgentRunner",
+    "OpenAICompatibleChatClient",
+    "OpenAICompatibleClientResponse",
+    "UnsupportedAgentRuntimeProviderError",
     "WorkflowAgentSessionManager",
+    "build_agent_runner",
     "check_agent_runtime_health",
 ]
