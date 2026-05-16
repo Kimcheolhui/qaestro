@@ -26,6 +26,12 @@ class RecordingOpenAICompatibleClient(OpenAICompatibleChatClient):
         return self.response
 
 
+class FailingOpenAICompatibleClient(OpenAICompatibleChatClient):
+    def complete(self, request: dict[str, object]) -> OpenAICompatibleClientResponse:
+        _ = request
+        raise TimeoutError("provider timed out with credential super-secret-token")
+
+
 def _supported_config() -> AgentRuntimeConfig:
     return AgentRuntimeConfig(
         provider=AgentRuntimeProvider.OPENAI_COMPATIBLE,
@@ -113,6 +119,48 @@ def test_openai_compatible_runner_normalizes_client_errors_without_secret_value(
 
     assert result.status is AgentRunStatus.FAILED
     assert result.error == "provider unavailable: <redacted>"
+
+
+def test_openai_compatible_runner_preserves_explicit_zero_budgets() -> None:
+    client = RecordingOpenAICompatibleClient(OpenAICompatibleClientResponse(output_text="analysis ok"))
+    runner = OpenAICompatibleAgentRunner(
+        config=_supported_config(),
+        client=client,
+        credential="super-secret-token",
+    )
+
+    result = runner.run(
+        session=_session(),
+        run_input=AgentRunInput(
+            stage=WorkflowStage.VALIDATOR,
+            prompt="Validate without tools",
+            correlation_id="corr-1",
+            timeout_seconds=0.0,
+            max_turns=0,
+            max_tool_calls=0,
+        ),
+    )
+
+    assert result.status is AgentRunStatus.SUCCEEDED
+    assert client.calls[0]["timeout_seconds"] == 0.0
+    assert client.calls[0]["max_turns"] == 0
+    assert client.calls[0]["max_tool_calls"] == 0
+
+
+def test_openai_compatible_runner_normalizes_client_exceptions_without_secret_value() -> None:
+    runner = OpenAICompatibleAgentRunner(
+        config=_supported_config(),
+        client=FailingOpenAICompatibleClient(),
+        credential="super-secret-token",
+    )
+
+    result = runner.run(
+        session=_session(),
+        run_input=AgentRunInput(stage=WorkflowStage.VALIDATOR, prompt="Validate", correlation_id="corr-1"),
+    )
+
+    assert result.status is AgentRunStatus.FAILED
+    assert result.error == "provider timed out with credential <redacted>"
 
 
 def test_agent_runner_factory_builds_openai_compatible_runner_from_env() -> None:

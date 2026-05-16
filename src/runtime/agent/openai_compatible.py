@@ -43,7 +43,16 @@ class OpenAICompatibleAgentRunner(AgentRunner):
         return handle
 
     def run(self, *, session: AgentSessionHandle, run_input: AgentRunInput) -> AgentRunResult:
-        response = self._client.complete(self._request_for(session=session, run_input=run_input))
+        try:
+            response = self._client.complete(self._request_for(session=session, run_input=run_input))
+        except Exception as exc:
+            return AgentRunResult(
+                session=session,
+                stage=run_input.stage,
+                status=AgentRunStatus.FAILED,
+                error=_redact_secret(str(exc), self._credential),
+                allowed_tool_names=run_input.allowed_tool_names,
+            )
         if response.error:
             return AgentRunResult(
                 session=session,
@@ -71,9 +80,13 @@ class OpenAICompatibleAgentRunner(AgentRunner):
             "prompt": run_input.prompt,
             "stage": run_input.stage.value,
             "correlation_id": run_input.correlation_id,
-            "timeout_seconds": run_input.timeout_seconds or self._config.timeout_seconds,
-            "max_turns": run_input.max_turns or self._config.max_turns,
-            "max_tool_calls": run_input.max_tool_calls or self._config.max_tool_calls,
+            "timeout_seconds": self._config.timeout_seconds
+            if run_input.timeout_seconds is None
+            else run_input.timeout_seconds,
+            "max_turns": self._config.max_turns if run_input.max_turns is None else run_input.max_turns,
+            "max_tool_calls": self._config.max_tool_calls
+            if run_input.max_tool_calls is None
+            else run_input.max_tool_calls,
             "temperature": self._config.temperature,
             "tool_names": run_input.allowed_tool_names,
             "credential_present": bool(self._credential),

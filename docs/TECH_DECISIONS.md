@@ -71,7 +71,7 @@ PR aggregate는 PR 전체 수명과 대화 history를 유지하고, 그 안에 `
 - Agent Runtime 설정은 provider, model/deployment id, endpoint/base URL, credential reference, timeout, max turns/tool calls, temperature 같은 실행 예산을 명시적으로 표현해야 한다.
 - 최소 capability policy는 tool/function calling, structured output 또는 schema-constrained response, context window를 별도 설정으로 선언하게 한다. provider가 capability metadata를 안정적으로 주지 않는 경우에도 bootstrap에서 unsupported/degraded/supported 상태를 구분할 수 있어야 한다.
 - Azure OpenAI와 OpenAI-compatible provider는 설정 shape를 분리하되, core 계층은 특정 provider SDK type에 직접 종속되지 않도록 유지한다.
-- OpenAI-compatible 계열은 `base_url` + `model` + API key env var를 기본 shape로 두고, runner factory는 provider-neutral `AgentRunner` 뒤에 좁은 client protocol을 주입받는다. Step 5에서는 실제 HTTP/SDK live client를 만들지 않고 mocked client로 contract를 검증한다.
+- OpenAI-compatible 계열은 `base_url` + `model` + API key env var를 기본 shape로 두고, runner factory는 provider-neutral `AgentRunner` 뒤에 좁은 client protocol을 주입받는다. Step 5에서는 실제 HTTP/SDK live client를 만들지 않고 mocked client로 contract를 검증한다. organization/project headers처럼 HTTP 요청 표면에 직접 묶이는 옵션은 live adapter 구현 시점으로 defer하여, 아직 확정되지 않은 header shape가 runtime contract를 불필요하게 키우지 않도록 한다.
 - GitHub Copilot은 self-hosted 비대화형 runtime provider로 직접 지원하지 않는다. 인증/정책/ToS와 비대화형 사용 경계가 명확해지기 전까지는 explicit unsupported provider로 남기고, OpenAI-compatible endpoint 또는 Azure OpenAI를 지원 경로로 둔다.
 - credential 값은 config object의 repr, log, report, issue output에 노출하지 않는다. health check error도 credential 값 대신 env var 이름과 조치 가능한 누락 항목만 보여준다.
 - provider 선택과 session 생성은 `app/worker` 또는 `runtime/agent` adapter/factory 경계에 두고, 테스트에서는 fake provider로 같은 contract를 검증한다.
