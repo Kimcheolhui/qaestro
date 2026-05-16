@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from src.runtime.agent import AgentRuntimeHealthStatus, check_agent_runtime_health
+from src.runtime.agent import AgentRuntimeHealthStatus, LiveSmokeProbeStatus, check_agent_runtime_health
 from src.shared.config import AgentRuntimeConfig, AgentRuntimeProvider
 
 
@@ -68,7 +68,9 @@ def test_enabled_runtime_requires_declared_context_window() -> None:
 
     assert result.status is AgentRuntimeHealthStatus.UNSUPPORTED
     assert result.ok is False
-    assert result.actionable_errors == ("context window token capacity is required for QAESTRO_AGENT_CONTEXT_WINDOW_TOKENS.",)
+    assert result.actionable_errors == (
+        "context window token capacity is required for QAESTRO_AGENT_CONTEXT_WINDOW_TOKENS.",
+    )
 
 
 def test_supported_runtime_can_warn_when_live_smoke_is_not_enabled() -> None:
@@ -87,7 +89,33 @@ def test_supported_runtime_can_warn_when_live_smoke_is_not_enabled() -> None:
     assert result.status is AgentRuntimeHealthStatus.SUPPORTED
     assert result.ok is True
     assert result.actionable_errors == ()
-    assert result.warnings == ("Live provider smoke check not executed; set opt_in_live_smoke=True to probe provider connectivity.",)
+    assert result.warnings == (
+        "Live provider smoke check not executed; set opt_in_live_smoke=True to probe provider connectivity.",
+    )
+    assert result.live_smoke_probe_status is LiveSmokeProbeStatus.NOT_REQUESTED
+    assert "super-secret-token" not in repr(result)
+
+
+def test_opt_in_live_smoke_is_explicitly_not_implemented_until_provider_adapter_exists() -> None:
+    config = AgentRuntimeConfig(
+        provider=AgentRuntimeProvider.OPENAI_COMPATIBLE,
+        model="review-model",
+        base_url="https://llm.example.test/v1",
+        credential_env_var="QAESTRO_AGENT_API_KEY",
+        supports_tool_calling=True,
+        supports_structured_output=True,
+        context_window_tokens=64_000,
+    )
+
+    result = check_agent_runtime_health(
+        config,
+        environ={"QAESTRO_AGENT_API_KEY": "super-secret-token"},
+        opt_in_live_smoke=True,
+    )
+
+    assert result.status is AgentRuntimeHealthStatus.SUPPORTED
+    assert result.live_smoke_probe_status is LiveSmokeProbeStatus.NOT_IMPLEMENTED
+    assert result.warnings == ("Live provider smoke check was requested but no provider adapter implements it yet.",)
     assert "super-secret-token" not in repr(result)
 
 
