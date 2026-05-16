@@ -11,7 +11,7 @@ from src.adapters.renderers import PRCommentPayload
 from src.app.gateway import GitHubWebhookGateway, WebhookRequest
 from src.app.jobs import InMemoryJobQueue
 from src.app.worker import Worker, WorkerStatus
-from src.core.contracts import CICompleted, CIReadinessState, PREvent
+from src.core.contracts import CICompleted, CIFeedbackContext, CIReadinessState, PREvent
 from src.core.contracts.parsers import parse_github_ci_event
 from src.runtime.orchestrator import (
     CheckRunSnapshot,
@@ -93,7 +93,7 @@ def _enqueue_with_payload(
 def _build_worker(
     *, aggregate_store: InMemoryPRAggregateStore, check_provider: MutableCheckSnapshotProvider
 ) -> tuple[Worker, RecordingOutputPoster]:
-    def ci_feedback_for(event: PREvent):
+    def ci_feedback_for(event: PREvent) -> CIFeedbackContext:
         aggregate = aggregate_store.apply_pr_event(event)
         checks = check_provider.load(
             repo_full_name=event.repo_full_name,
@@ -293,4 +293,5 @@ def test_ci_feedback_loop_replay_separates_pending_current_head_and_stale_histor
 def _fixture_json(name: str) -> dict[str, object]:
     import json
 
-    return json.loads((FIXTURES / name).read_text(encoding="utf-8"))
+    payload: dict[str, object] = json.loads((FIXTURES / name).read_text(encoding="utf-8"))
+    return payload
