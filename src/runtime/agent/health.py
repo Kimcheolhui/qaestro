@@ -21,6 +21,13 @@ class AgentRuntimeHealthStatus(StrEnum):
     UNSUPPORTED = "unsupported"
 
 
+class LiveSmokeProbeStatus(StrEnum):
+    """Whether an opt-in live provider smoke probe actually ran."""
+
+    NOT_REQUESTED = "not_requested"
+    NOT_IMPLEMENTED = "not_implemented"
+
+
 @dataclass(frozen=True)
 class AgentRuntimeHealthResult:
     """Secret-safe result of checking Agent Runtime readiness.
@@ -34,6 +41,7 @@ class AgentRuntimeHealthResult:
     status: AgentRuntimeHealthStatus
     actionable_errors: tuple[str, ...] = ()
     warnings: tuple[str, ...] = ()
+    live_smoke_probe_status: LiveSmokeProbeStatus = LiveSmokeProbeStatus.NOT_REQUESTED
 
     @property
     def ok(self) -> bool:
@@ -80,15 +88,22 @@ def check_agent_runtime_health(
             warnings=tuple(warnings),
         )
 
-    if not opt_in_live_smoke:
+    if opt_in_live_smoke:
+        warnings.append("Live provider smoke check was requested but no provider adapter implements it yet.")
+        live_smoke_probe_status = LiveSmokeProbeStatus.NOT_IMPLEMENTED
+    else:
         warnings.append(
             "Live provider smoke check not executed; set opt_in_live_smoke=True to probe provider connectivity."
         )
+        live_smoke_probe_status = LiveSmokeProbeStatus.NOT_REQUESTED
 
     return AgentRuntimeHealthResult(
         provider=config.provider,
-        status=AgentRuntimeHealthStatus.DEGRADED if warnings and _has_degradation_warning(warnings) else AgentRuntimeHealthStatus.SUPPORTED,
+        status=AgentRuntimeHealthStatus.DEGRADED
+        if warnings and _has_degradation_warning(warnings)
+        else AgentRuntimeHealthStatus.SUPPORTED,
         warnings=tuple(warnings),
+        live_smoke_probe_status=live_smoke_probe_status,
     )
 
 
