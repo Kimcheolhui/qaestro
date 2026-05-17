@@ -131,7 +131,7 @@ adapters.knowledge  → core.knowledge, shared
 
 - `runtime/orchestrator`: Event Router, correlation id, PR/채널/CI 맥락 묶기, workflow state 관리
 - `runtime/agent`: BYOK provider/session 설정, runner factory, fake/real provider 경계를 관리하는 Agent Runtime foundation
-- `runtime/validator`: 실제 런타임 검증 실행. MVP는 `api_contract`, `ui_flow` probe부터 시작
+- `runtime/validator`: 실제 런타임 검증 실행. MVP는 `api_contract` probe부터 시작하고, `ui_flow`나 multi-step behaviour probe는 이후 확장
 
 ### `adapters/`
 
