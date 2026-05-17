@@ -92,8 +92,7 @@ def test_validation_stage_runs_provider_neutral_agent_runner_with_bounded_tools(
 
     assert result.validations[0].outcome is ValidationOutcome.SKIPPED
     assert (
-        result.validations[0].details
-        == "Agent Runtime validation runner completed; concrete probe verdict is deferred to #62."
+        result.validations[0].details == "api_contract_probe_skipped: no non-live executor configured for GET /health."
     )
     assert len(fake_runner.started_sessions) == 1
     assert fake_runner.started_sessions[0].scope.value == "workflow"
