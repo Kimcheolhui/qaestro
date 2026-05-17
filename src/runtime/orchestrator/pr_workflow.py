@@ -114,7 +114,11 @@ class PRWorkflowOrchestrator:
             triage.depth is PRWorkflowDepth.DEEP or self._should_validate(event, impact, strategy)
         ):
             stages.append(WorkflowStage.VALIDATOR)
-            validations = self._validator.validate(strategy)
+            validate_for_event = getattr(self._validator, "validate_for_event", None)
+            if callable(validate_for_event):
+                validations = validate_for_event(event=event, strategy=strategy)
+            else:
+                validations = self._validator.validate(strategy)
         else:
             validations = ()
 
