@@ -238,14 +238,18 @@ class AgentRuntimePRValidator:
         try:
             result = self._session_manager.run_stage(session_handle, run_input)
         except Exception as exc:
-            return ValidationResult(action=action, outcome=ValidationOutcome.ERROR, details=str(exc))
+            return ValidationResult(
+                action=action,
+                outcome=ValidationOutcome.ERROR,
+                details=_agent_runner_error_details(kind="agent_runner_exception", exc=exc),
+            )
 
         if result.status is AgentRunStatus.SUCCEEDED:
             return None
         return ValidationResult(
             action=action,
             outcome=ValidationOutcome.ERROR,
-            details=result.error or f"Agent Runtime validation ended with status {result.status.value}.",
+            details=_agent_runner_status_details(result.status),
         )
 
     def _run_api_contract_probe(self, *, action: StrategyAction, request: APIContractProbeRequest) -> ValidationResult:
@@ -267,11 +271,12 @@ class AgentRuntimePRValidator:
                 duration_seconds=monotonic() - start,
             )
 
+        elapsed = monotonic() - start
         return ValidationResult(
             action=action,
             outcome=result.outcome,
             details=result.details,
-            duration_seconds=result.duration_seconds,
+            duration_seconds=result.duration_seconds or elapsed,
             artifacts=result.artifacts,
         )
 
@@ -337,6 +342,16 @@ def _probe_error_details(*, kind: str, exc: Exception) -> str:
     # comments. Future live executors may include response bodies, tokens, or
     # endpoint details in exception strings.
     return f"{kind}: {type(exc).__name__} raised by API contract probe executor."
+
+
+def _agent_runner_error_details(*, kind: str, exc: Exception) -> str:
+    # Keep provider/transport exception strings out of rendered validation
+    # details. They may include endpoints, token fragments, or credential hints.
+    return f"{kind}: {type(exc).__name__} raised during Agent Runtime validation."
+
+
+def _agent_runner_status_details(status: AgentRunStatus) -> str:
+    return f"agent_runner: Agent Runtime validation ended with status {status.name}."
 
 
 def _api_contract_probe_request(

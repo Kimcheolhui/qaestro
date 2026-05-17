@@ -16,6 +16,7 @@ from src.core.contracts import (
     ValidationOutcome,
 )
 from src.runtime.agent.fake import FakeAgentRunner
+from src.runtime.agent.types import AgentRunInput, AgentRunResult, AgentRunStatus, AgentSessionHandle
 from src.runtime.stages import WorkflowStage
 from src.runtime.tools import AgentFrameworkToolAdapter, RegisteredToolRuntime, StageToolPolicy
 from src.runtime.validator import (
@@ -75,6 +76,80 @@ class RecordingProbeExecutor:
         if isinstance(self._result, BaseException):
             raise self._result
         return self._result
+
+
+class FailingAgentRunner(FakeAgentRunner):
+    def __init__(self, *, error: str) -> None:
+        super().__init__()
+        self._error = error
+
+    def run(self, *, session: AgentSessionHandle, run_input: AgentRunInput) -> AgentRunResult:
+        self.run_inputs.append(run_input)
+        return AgentRunResult(
+            session=session,
+            stage=run_input.stage,
+            status=AgentRunStatus.FAILED,
+            error=self._error,
+            allowed_tool_names=run_input.allowed_tool_names,
+        )
+
+
+class RaisingAgentRunner(FakeAgentRunner):
+    def __init__(self, *, error: str) -> None:
+        super().__init__()
+        self._error = error
+
+    def run(self, *, session: AgentSessionHandle, run_input: AgentRunInput) -> AgentRunResult:
+        self.run_inputs.append(run_input)
+        raise RuntimeError(self._error)
+
+
+def test_agent_runner_errors_are_sanitized_before_validation_details() -> None:
+    executor = RecordingProbeExecutor(APIContractProbeResult(outcome=ValidationOutcome.PASS, details="should not run"))
+    failing_runner = FailingAgentRunner(error="provider failed token=secret-token endpoint=https://private.example")
+    validator = build_agent_runtime_pr_validator(runner=failing_runner, api_contract_probe_executor=executor)
+
+    failed_result = validator.validate_for_event(event=_pr_opened_event(), strategy=_strategy(_api_contract_action()))[
+        0
+    ]
+
+    assert failed_result.outcome is ValidationOutcome.ERROR
+    assert "agent_runner" in failed_result.details
+    assert "FAILED" in failed_result.details
+    assert "secret-token" not in failed_result.details
+    assert "private.example" not in failed_result.details
+    assert executor.requests == []
+
+    raising_runner = RaisingAgentRunner(error="transport crashed password=hunter2 endpoint=https://private.example")
+    validator = build_agent_runtime_pr_validator(runner=raising_runner, api_contract_probe_executor=executor)
+
+    raised_result = validator.validate_for_event(event=_pr_opened_event(), strategy=_strategy(_api_contract_action()))[
+        0
+    ]
+
+    assert raised_result.outcome is ValidationOutcome.ERROR
+    assert "agent_runner_exception" in raised_result.details
+    assert "RuntimeError" in raised_result.details
+    assert "hunter2" not in raised_result.details
+    assert "private.example" not in raised_result.details
+
+
+def test_successful_probe_uses_wall_clock_duration_when_executor_duration_is_missing() -> None:
+    executor = RecordingProbeExecutor(
+        APIContractProbeResult(
+            outcome=ValidationOutcome.PASS,
+            details="probe passed but executor did not report duration",
+        )
+    )
+    validator = build_agent_runtime_pr_validator(
+        runner=FakeAgentRunner(response="agent selected validation.api_contract.probe"),
+        api_contract_probe_executor=executor,
+    )
+
+    validation = validator.validate_for_event(event=_pr_opened_event(), strategy=_strategy(_api_contract_action()))[0]
+
+    assert validation.outcome is ValidationOutcome.PASS
+    assert validation.duration_seconds > 0.0
 
 
 def test_api_contract_action_executes_pluggable_probe_and_maps_pass_result() -> None:
