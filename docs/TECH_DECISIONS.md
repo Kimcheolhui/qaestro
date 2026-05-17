@@ -55,6 +55,8 @@ Step 3.5의 ToolRuntime 전환은 이 방향을 코드 경계로 고정하기 �
 
 Step 5는 Runtime Validation 자체가 아니라 **Agent Runtime Foundation**으로 둔다. 현재 구현은 `WorkerExecutionContext.agent_runner` 같은 opaque slot과 tool adapter seam만 있고, 실제 agent session 생성, LLM provider 설정, model/deployment 선택, credential loading, execution budget, fake/real provider 분리, 최소 capability 판단이 없다. 이 상태에서 validation probe workflow를 먼저 구현하면 실행 주체가 없는 interface만 늘거나, Azure OpenAI/OpenAI-compatible provider 중 하나에 우발적으로 결합될 가능성이 높다. 따라서 구체 validation probe와 report 반영은 Step 6으로 미루고, Step 5에서는 BYOK 기반 provider/session/runner contract와 Microsoft Agent Framework SDK 격리 경계를 먼저 구현한다.
 
+Step 6 Runtime Validation MVP는 Step 5에서 만든 provider-neutral `AgentRunner`/session manager를 validation stage에 연결하는 것부터 시작한다. Microsoft Agent Framework preview SDK 자체를 붙이는 것은 MVP의 필수 조건이 아니며, validation runner는 fake/pluggable executor와 Agent Framework-facing ToolRuntime seam만으로도 검증 가능해야 한다. MVP probe 범위는 API contract부터 시작하고, UI flow나 multi-step behaviour probe는 이후 확장으로 둔다. Approval이 필요한 guardrail 결과는 별도 domain enum 추가를 전제로 하지 않고, 우선 `ValidationOutcome.SKIPPED`와 명시적인 reason/details로 표현할 수 있다.
+
 ### 5. PR review lifecycle: deferred unified review + manual trigger first
 
 qaestro는 PR opened, PR synchronize, workflow_run completed, GitHub comment/review, ChatOps mention을 별도 이벤트로 수신하되, 판단과 출력은 PR 단위 aggregate state에서 종합한다. 권장 MVP는 manual-trigger first다. 사용자가 PR 또는 channel에서 `@qaestro review`처럼 명시적으로 요청하면 current PR aggregate를 만들고, current `head_sha` 기준 CI/check snapshot을 확인한 뒤 가능한 경우 unified review를 수행한다. 자동 리뷰는 이후 repo 설정으로 opt-in/optional하게 확장한다.

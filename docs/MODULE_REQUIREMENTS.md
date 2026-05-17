@@ -352,6 +352,7 @@ qaestro를 구현할 때 참고할 수 있는 모듈 단위 요구사항 문서.
 - MVP는 API contract probe부터 시작
 - 이후 UI flow probe를 추가 가능해야 함
 - timeout, partial failure, skipped result를 표현할 수 있어야 함
+- approval이 필요한 guardrail 결과는 MVP에서 별도 enum을 전제로 하지 않고 `SKIPPED`와 명시적인 reason/details로 표현 가능해야 함
 - destructive action 없이 bounded autonomy 정책을 따라야 함
 
 **제외 범위**
