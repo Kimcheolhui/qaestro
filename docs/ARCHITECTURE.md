@@ -114,7 +114,7 @@ normalized event
 | Triage / readiness | 수집된 PR·CI·check context를 바탕으로 workflow depth와 final review 가능 여부 결정 | `PRWorkflowTriage`, current head check snapshot |
 | Analysis / strategy | 수집된 context, knowledge read, 제한된 추가 조회 | `knowledge.search` |
 | Agent runtime | provider/session/runner 생성, LLM-backed tool selection 준비 | Step 5에서 BYOK provider 설정과 runner factory 추가 |
-| Validation | strategy가 선택한 runtime probe/test execution | 이후 Step 6에서 runtime probe tool 추가 |
+| Validation | strategy가 선택한 runtime probe/test execution. API contract probe는 Step 6 MVP에서 read-only method(`GET`, `HEAD`, `OPTIONS`)만 자동 실행하고, write-like/destructive probe는 `SKIPPED` + `needs_approval`/`policy_denied` reason으로 남긴다. | `validation.api_contract.probe` |
 | Output | PR managed comment, PR review/inline comment, chat response 같은 write action | `github.pr.comment.create_or_update`, 이후 `github.pr.review.create` |
 
 Read tool은 맥락 수집과 판단을 돕기 위해 비교적 넓게 허용할 수 있지만, write tool은 output policy를 거쳐야 한다. destructive action은 기본 금지이며, comment 작성·knowledge write 같은 side effect는 correlation id와 중복 방지 정책을 함께 고려한다.

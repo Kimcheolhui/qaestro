@@ -19,6 +19,7 @@ from src.runtime.agent.types import AgentRunInput, AgentRunner, AgentRunStatus, 
 from src.runtime.stages import WorkflowStage
 from src.runtime.tools import (
     AgentFrameworkToolAdapter,
+    AgentFrameworkToolSpec,
     RegisteredToolRuntime,
     StageToolPolicy,
     ToolCall,
@@ -28,6 +29,8 @@ from src.runtime.tools import (
 
 _VALIDATION_API_CONTRACT_PROBE = "validation.api_contract.probe"
 _SUPPORTED_API_METHODS = frozenset({"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"})
+_AUTO_RUN_API_METHODS = ("GET", "HEAD", "OPTIONS")
+_DENIED_PROBE_CAPABILITIES = frozenset({ToolCapability.WRITE, ToolCapability.DESTRUCTIVE})
 
 
 @dataclass(frozen=True)
@@ -195,15 +198,32 @@ class AgentRuntimePRValidator:
             return ValidationResult(
                 action=action,
                 outcome=ValidationOutcome.SKIPPED,
-                details=f"unsupported API contract target: {action.target}",
+                details=f"invalid_target: API contract target must be '<METHOD> /path'; got {action.target!r}.",
             )
 
-        allowed_tool_names = self._tool_adapter.tool_specs_for_stage(WorkflowStage.VALIDATOR)
-        if not any(tool.name == _VALIDATION_API_CONTRACT_PROBE for tool in allowed_tool_names):
+        target_policy_denial = _api_contract_target_policy_denial(probe_request)
+        if target_policy_denial:
+            return ValidationResult(
+                action=action,
+                outcome=ValidationOutcome.SKIPPED,
+                details=target_policy_denial,
+            )
+
+        allowed_tool_exposure = self._tool_adapter.tool_exposure_for_stage(WorkflowStage.VALIDATOR)
+        probe_exposure = _find_tool_exposure(allowed_tool_exposure, _VALIDATION_API_CONTRACT_PROBE)
+        if probe_exposure is None:
             return ValidationResult(
                 action=action,
                 outcome=ValidationOutcome.ERROR,
                 details=f"{_VALIDATION_API_CONTRACT_PROBE} is not allowed during validator stage.",
+            )
+        probe_spec, probe_denial_reason = probe_exposure
+        probe_policy_denial = _probe_definition_policy_denial(probe_spec, probe_denial_reason)
+        if probe_policy_denial:
+            return ValidationResult(
+                action=action,
+                outcome=ValidationOutcome.SKIPPED,
+                details=probe_policy_denial,
             )
 
         run_result = self._run_agent_selection(event=event, action=action, session_handle=session_handle)
@@ -334,6 +354,35 @@ def _has_complete_pr_event_context(event: PREvent) -> bool:
         and event.pr_number > 0
         and event.head_sha.strip()
         and event.meta.correlation_id.strip()
+    )
+
+
+def _find_tool_exposure(
+    exposures: tuple[tuple[AgentFrameworkToolSpec, str], ...], name: str
+) -> tuple[AgentFrameworkToolSpec, str] | None:
+    return next((exposure for exposure in exposures if exposure[0].name == name), None)
+
+
+def _api_contract_target_policy_denial(request: APIContractProbeRequest) -> str:
+    if request.method in _AUTO_RUN_API_METHODS:
+        return ""
+    allowed = ", ".join(_AUTO_RUN_API_METHODS)
+    return (
+        "needs_approval: write-like API contract probe is not auto-run in Step 6 MVP; "
+        f"method {request.method} for {request.path} requires explicit approval or a later safe executor policy. "
+        f"Auto-run methods: {allowed}."
+    )
+
+
+def _probe_definition_policy_denial(spec: AgentFrameworkToolSpec, policy_denial_reason: str) -> str:
+    if policy_denial_reason:
+        return f"policy_denied: {policy_denial_reason}."
+    denied = sorted(capability.value for capability in spec.capabilities if capability in _DENIED_PROBE_CAPABILITIES)
+    if not denied:
+        return ""
+    return (
+        "policy_denied: validation probe definition includes "
+        f"{', '.join(denied)} capability; Step 6 MVP only auto-runs read-only execution probes."
     )
 
 

@@ -102,3 +102,49 @@ def test_agent_framework_adapter_keeps_stage_policy_as_guardrail() -> None:
             arguments={},
             correlation_id="corr-agent-framework-denied",
         )
+
+
+def test_agent_framework_adapter_does_not_expose_policy_denied_destructive_tool_specs() -> None:
+    destructive_tool = ToolDefinition(
+        name="demo.destroy",
+        description="Dangerous destructive validation probe.",
+        input_schema={"type": "object", "properties": {}},
+        capabilities=(ToolCapability.EXECUTE, ToolCapability.DESTRUCTIVE),
+        handler=lambda call: {"destroyed": True},
+    )
+    policy = StageToolPolicy({WorkflowStage.VALIDATOR: ("demo.destroy",)})
+    runtime = RegisteredToolRuntime(tools=(destructive_tool,), policy=policy)
+    adapter = AgentFrameworkToolAdapter(runtime=runtime, tools=(destructive_tool,), policy=policy)
+
+    assert adapter.tool_specs_for_stage(WorkflowStage.VALIDATOR) == ()
+
+    with pytest.raises(ToolPolicyError, match="destructive"):
+        adapter.invoke(
+            stage=WorkflowStage.VALIDATOR,
+            name="demo.destroy",
+            arguments={},
+            correlation_id="corr-destructive-denied",
+        )
+
+
+def test_agent_framework_adapter_does_not_expose_validation_stage_write_tool_specs() -> None:
+    write_tool = ToolDefinition(
+        name="validation.write_probe",
+        description="Misconfigured write-capable validation probe.",
+        input_schema={"type": "object", "properties": {}},
+        capabilities=(ToolCapability.EXECUTE, ToolCapability.WRITE),
+        handler=lambda call: {"wrote": True},
+    )
+    policy = StageToolPolicy({WorkflowStage.VALIDATOR: ("validation.write_probe",)})
+    runtime = RegisteredToolRuntime(tools=(write_tool,), policy=policy)
+    adapter = AgentFrameworkToolAdapter(runtime=runtime, tools=(write_tool,), policy=policy)
+
+    assert adapter.tool_specs_for_stage(WorkflowStage.VALIDATOR) == ()
+
+    with pytest.raises(ToolPolicyError, match="write"):
+        adapter.invoke(
+            stage=WorkflowStage.VALIDATOR,
+            name="validation.write_probe",
+            arguments={},
+            correlation_id="corr-validation-write-denied",
+        )
