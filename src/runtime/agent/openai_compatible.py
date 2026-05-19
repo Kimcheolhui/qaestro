@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from src.runtime.agent.azure_openai import AzureOpenAIAgentRunner, AzureOpenAIChatClient
+from src.runtime.agent.fake import FakeAgentRunner
 from src.runtime.agent.health import AgentRuntimeHealthStatus, check_agent_runtime_health
 from src.runtime.agent.types import AgentRunInput, AgentRunner, AgentRunResult, AgentRunStatus, AgentSessionHandle
 from src.shared.config import AgentRuntimeConfig, AgentRuntimeProvider
@@ -106,6 +107,9 @@ def build_agent_runner(
     azure_openai_client: AzureOpenAIChatClient | None = None,
 ) -> AgentRunner:
     """Build a provider-neutral runner from Agent Runtime configuration."""
+
+    if config.provider is AgentRuntimeProvider.DISABLED:
+        return FakeAgentRunner(response="agent runtime disabled; validation probe selection skipped")
 
     env = os.environ if environ is None else environ
     health = check_agent_runtime_health(config, environ=env)

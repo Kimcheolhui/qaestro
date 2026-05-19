@@ -13,6 +13,7 @@ from src.runtime.orchestrator import (
     ToolRuntimePRCommentPoster,
     ToolRuntimePRContextProvider,
 )
+from src.runtime.validator import AgentRuntimePRValidator
 from src.shared.config import AppConfig
 
 
@@ -87,6 +88,7 @@ def test_build_worker_wires_github_tool_runtime_for_durable_queue(tmp_path: Path
     pr_orchestrator = orchestrator._pr_orchestrator
     ci_orchestrator = orchestrator._ci_orchestrator
     assert isinstance(pr_orchestrator._context_provider, ToolRuntimePRContextProvider)
+    assert isinstance(pr_orchestrator._validator, AgentRuntimePRValidator)
     assert pr_orchestrator._ci_feedback_provider is not None
     assert isinstance(ci_orchestrator, CIWorkflowOrchestrator)
     assert isinstance(ci_orchestrator._context_provider, ToolRuntimeCIContextProvider)

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from src.core.contracts import CIFeedbackContext, CIHistoricalEvidence, CIObservation, QAReport
+from src.core.contracts import CIFeedbackContext, CIHistoricalEvidence, CIObservation, QAReport, ValidationResult
 
 if TYPE_CHECKING:
     from src.runtime.orchestrator.pr_triage import PRWorkflowTriage
@@ -245,7 +245,27 @@ def _action_lines(report: QAReport) -> list[str]:
 def _validation_lines(report: QAReport) -> list[str]:
     if not report.validations:
         return ["Validation not executed in this step — recommendations only."]
-    return [
-        f"- Validation: {result.outcome.value} — {result.details or result.action.description}"
-        for result in report.validations
+    lines: list[str] = []
+    for result in report.validations:
+        lines.extend(_validation_result_lines(result))
+    return lines
+
+
+def _validation_result_lines(result: ValidationResult) -> list[str]:
+    action = result.action
+    lines = [
+        f"- **{action.action_type.value.replace('_', ' ').upper()}** — {action.description}",
+        f"  - Target: {_inline_code_span(action.target)}",
+        f"  - Outcome: **{_markdown_text(result.outcome.value.upper())}**",
     ]
+    if result.duration_seconds > 0:
+        lines.append(f"  - Duration: {_inline_code_span(f'{result.duration_seconds:.3f}s')}")
+    detail = result.details or action.rationale
+    if detail:
+        lines.append(f"  - Details: {detail}")
+    if result.artifacts:
+        artifact_links = ", ".join(
+            f"[artifact {index}]({artifact})" for index, artifact in enumerate(result.artifacts, start=1)
+        )
+        lines.append(f"  - Artifacts: {artifact_links}")
+    return lines
