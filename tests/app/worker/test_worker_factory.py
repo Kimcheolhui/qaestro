@@ -10,9 +10,11 @@ from src.runtime.orchestrator import (
     CIWorkflowOrchestrator,
     EventOrchestrator,
     ToolRuntimeCIContextProvider,
-    ToolRuntimePRCommentPoster,
     ToolRuntimePRContextProvider,
+    ToolRuntimePROutputPoster,
 )
+from src.runtime.stages import WorkflowStage
+from src.runtime.tools import RegisteredToolRuntime
 from src.runtime.validator import AgentRuntimePRValidator
 from src.shared.config import AppConfig
 
@@ -93,4 +95,13 @@ def test_build_worker_wires_github_tool_runtime_for_durable_queue(tmp_path: Path
     assert isinstance(ci_orchestrator, CIWorkflowOrchestrator)
     assert isinstance(ci_orchestrator._context_provider, ToolRuntimeCIContextProvider)
     assert ci_orchestrator._aggregate_store is not None
-    assert isinstance(_output_poster(worker), ToolRuntimePRCommentPoster)
+    output_poster = _output_poster(worker)
+    assert isinstance(output_poster, ToolRuntimePROutputPoster)
+    runtime = output_poster._runtime
+    assert isinstance(runtime, RegisteredToolRuntime)
+    assert set(runtime._policy.allowed_tool_names(WorkflowStage.OUTPUT)) == {
+        "github.pr.view",
+        "github.pr.comment.create_or_update",
+        "github.pr.review.list",
+        "github.pr.review.create",
+    }

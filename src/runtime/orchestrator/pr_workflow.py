@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import cast
 
-from src.adapters.renderers import GitHubPRCommentRenderer, PRCommentPayload
+from src.adapters.renderers import GitHubPRCommentRenderer, PRCommentPayload, PRReviewPayload
 from src.core.analyzer import PRAnalysisContext, RuleBasedPRBehaviourAnalyzer
 from src.core.contracts import (
     BehaviourImpact,
@@ -135,13 +135,53 @@ class PRWorkflowOrchestrator:
         stage_order = (*stages, WorkflowStage.RENDERER)
         draft = PRWorkflowDraft(event=event, report=report, triage=triage, stage_order=stage_order)
         comment_payload = self._renderer.render(draft)
+        review_payload = _review_payload_for_draft(draft)
         return PRWorkflowResult(
             event=event,
             report=report,
             triage=triage,
             comment_payload=comment_payload,
+            review_payload=review_payload,
             stage_order=stage_order,
         )
+
+
+def _review_payload_for_draft(draft: PRWorkflowDraft) -> PRReviewPayload | None:
+    if not draft.event.head_sha:
+        return None
+    validation_lines = _review_validation_lines(draft.validations)
+    if not validation_lines:
+        validation_lines = ["- No runtime validation evidence was produced for this run."]
+    body = "\n".join(
+        (
+            "## Runtime Validation Review",
+            "",
+            draft.report.summary_markdown or draft.report.impact.summary,
+            "",
+            "### Validation Evidence",
+            *validation_lines,
+            "",
+            f"Correlation ID: `{draft.correlation_id}`",
+        )
+    )
+    return PRReviewPayload(
+        repo_full_name=draft.report.repo_full_name,
+        pr_number=draft.report.pr_number or draft.event.pr_number,
+        head_sha=draft.event.head_sha,
+        body=body,
+        event="COMMENT",
+    )
+
+
+def _review_validation_lines(validations: tuple[ValidationResult, ...]) -> list[str]:
+    lines: list[str] = []
+    for result in validations:
+        status = result.outcome.value.upper()
+        target = result.action.target or result.action.description
+        detail = result.details or result.action.rationale
+        suffix = f": {detail}" if detail else ""
+        lines.append(f"- **{status}** `{target}`{suffix}")
+    return lines
 
 
 class _DefaultDraftRenderer:

@@ -37,7 +37,7 @@ from .tool_context import (
     ToolRuntimePRCheckSnapshotProvider,
     ToolRuntimePRContextProvider,
 )
-from .tool_output import ToolRuntimePRCommentPoster
+from .tool_output import PROutputPostResult, ToolRuntimePRCommentPoster, ToolRuntimePROutputPoster
 from .types import (
     PRBehaviourAnalyzer,
     PRRuntimeValidator,
@@ -67,6 +67,7 @@ __all__ = [
     "PRCheckSnapshotProvider",
     "PRCommentWorkflowOrchestrator",
     "PRContextProvider",
+    "PROutputPostResult",
     "PRReviewWorkflowOrchestrator",
     "PRRevisionState",
     "PRRevisionStatus",
@@ -90,5 +91,6 @@ __all__ = [
     "ToolRuntimePRCheckSnapshotProvider",
     "ToolRuntimePRCommentPoster",
     "ToolRuntimePRContextProvider",
+    "ToolRuntimePROutputPoster",
     "UnsupportedEventError",
 ]

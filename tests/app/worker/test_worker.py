@@ -9,7 +9,7 @@ from typing import Any, cast
 
 import pytest
 
-from src.adapters.renderers import PRCommentPayload
+from src.adapters.renderers import PRCommentPayload, PRReviewPayload
 from src.app.worker import EventJob, InMemoryJobQueue, MalformedEventJob, Worker, WorkerStatus
 from src.core.contracts import CICompleted, Event, EventMeta, EventSource, EventType, PROpened
 from src.runtime.orchestrator import (
@@ -74,13 +74,25 @@ class RecordingOrchestrator:
 class RecordingOutputPoster:
     def __init__(self) -> None:
         self.payloads: list[PRCommentPayload] = []
+        self.outputs: list[tuple[PRCommentPayload, PRReviewPayload | None, str]] = []
 
     def post_comment(self, payload: PRCommentPayload, *, correlation_id: str) -> object:
         self.payloads.append(payload)
         return correlation_id
 
+    def post_outputs(
+        self,
+        payload: PRCommentPayload,
+        *,
+        review_payload: PRReviewPayload | None = None,
+        correlation_id: str,
+    ) -> object:
+        self.outputs.append((payload, review_payload, correlation_id))
+        self.payloads.append(payload)
+        return correlation_id
 
-def _result(event: PROpened) -> PRWorkflowResult:
+
+def _result(event: PROpened, *, review_payload: PRReviewPayload | None = None) -> PRWorkflowResult:
     payload = PRCommentPayload(
         repo_full_name=event.repo_full_name,
         pr_number=event.pr_number,
@@ -97,6 +109,7 @@ def _result(event: PROpened) -> PRWorkflowResult:
             allowed_stages=(WorkflowStage.ANALYZER, WorkflowStage.STRATEGY, WorkflowStage.VALIDATOR),
         ),
         comment_payload=payload,
+        review_payload=review_payload,
         stage_order=(WorkflowStage.ANALYZER, WorkflowStage.STRATEGY, WorkflowStage.RENDERER),
     )
 
@@ -113,6 +126,25 @@ def test_worker_processes_single_event_and_posts_comment() -> None:
     assert result.correlation_id == "corr-worker-001"
     assert orchestrator.events == [event]
     assert poster.payloads == [orchestrator._result.comment_payload]
+
+
+def test_worker_posts_summary_and_review_when_result_includes_review_payload() -> None:
+    event = _event()
+    review_payload = PRReviewPayload(
+        repo_full_name=event.repo_full_name,
+        pr_number=event.pr_number,
+        head_sha="abc123",
+        body="review body",
+    )
+    workflow_result = _result(event, review_payload=review_payload)
+    orchestrator = RecordingOrchestrator(workflow_result)
+    poster = RecordingOutputPoster()
+    worker = Worker(orchestrator=orchestrator, output_poster=poster)
+
+    result = worker.process(EventJob(event=event, correlation_id=event.meta.correlation_id))
+
+    assert result.status == WorkerStatus.SUCCEEDED
+    assert poster.outputs == [(workflow_result.comment_payload, review_payload, "corr-worker-001")]
 
 
 def test_worker_treats_ci_no_output_result_as_success_without_posting() -> None:

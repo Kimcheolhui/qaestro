@@ -19,7 +19,7 @@ from .auth import Clock, GitHubAppAuth, SystemClock
 from .client import GitHubClient
 from .errors import AuthError, GitHubError, NotFoundError, RateLimitError
 from .transport import FakeResponse, FakeTransport, HTTPResponse, HTTPTransport, UrllibTransport
-from .types import ActionsJobResult, CheckRunResult, CommentResult, FileDiff, PRMeta
+from .types import ActionsJobResult, CheckRunResult, CommentResult, FileDiff, PRMeta, ReviewCommentInput, ReviewResult
 from .webhook import verify_signature
 
 __all__ = [
@@ -39,6 +39,8 @@ __all__ = [
     "NotFoundError",
     "PRMeta",
     "RateLimitError",
+    "ReviewCommentInput",
+    "ReviewResult",
     "SystemClock",
     "UrllibTransport",
     "verify_signature",
