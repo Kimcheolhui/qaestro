@@ -7,6 +7,7 @@ from src.runtime.agent import (
     AgentRunStatus,
     AgentSessionHandle,
     AgentSessionScope,
+    FakeAgentRunner,
     OpenAICompatibleAgentRunner,
     OpenAICompatibleChatClient,
     OpenAICompatibleClientResponse,
@@ -161,6 +162,12 @@ def test_openai_compatible_runner_normalizes_client_exceptions_without_secret_va
 
     assert result.status is AgentRunStatus.FAILED
     assert result.error == "provider timed out with credential <redacted>"
+
+
+def test_agent_runner_factory_builds_fake_runner_for_disabled_runtime() -> None:
+    runner = build_agent_runner(AgentRuntimeConfig(provider=AgentRuntimeProvider.DISABLED))
+
+    assert isinstance(runner, FakeAgentRunner)
 
 
 def test_agent_runner_factory_builds_openai_compatible_runner_from_env() -> None:

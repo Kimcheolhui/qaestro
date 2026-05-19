@@ -180,16 +180,10 @@ def test_agent_runner_factory_builds_azure_openai_runner_from_env() -> None:
     assert isinstance(runner, AzureOpenAIAgentRunner)
 
 
-def test_agent_runner_factory_requires_injected_azure_client_until_live_adapter_is_configured() -> None:
-    try:
-        build_agent_runner(_supported_config(), environ={"QAESTRO_AZURE_OPENAI_KEY": "super-secret-token"})
-    except ValueError as exc:
-        message = str(exc)
-    else:  # pragma: no cover - assertion clarity
-        raise AssertionError("Azure OpenAI runner should require injected client before live adapter wiring")
+def test_agent_runner_factory_builds_live_azure_openai_runner_from_env() -> None:
+    runner = build_agent_runner(_supported_config(), environ={"QAESTRO_AZURE_OPENAI_KEY": "super-secret-token"})
 
-    assert "Azure OpenAI runner requires an injected client until a live adapter is configured." in message
-    assert "super-secret-token" not in message
+    assert isinstance(runner, AzureOpenAIAgentRunner)
 
 
 def test_azure_openai_live_smoke_is_not_requested_by_default() -> None:

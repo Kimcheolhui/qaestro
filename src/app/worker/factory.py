@@ -7,7 +7,13 @@ from pathlib import Path
 
 from src.adapters.connectors.github import GitHubAppAuth, GitHubClient
 from src.core.contracts import CIFeedbackContext, PREvent
-from src.runtime.agent import AgentRuntimeHealthResult, AgentRuntimeHealthStatus, check_agent_runtime_health
+from src.runtime.agent import (
+    AgentRuntimeHealthResult,
+    AgentRuntimeHealthStatus,
+    build_agent_runner,
+    check_agent_runtime_health,
+)
+from src.runtime.agent.types import AgentRunner
 from src.runtime.orchestrator import (
     CIWorkflowOrchestrator,
     EventOrchestrator,
@@ -22,6 +28,7 @@ from src.runtime.orchestrator import (
 from src.runtime.stages import WorkflowStage
 from src.runtime.tools import RegisteredToolRuntime, StageToolPolicy
 from src.runtime.tools.github import build_github_pr_tools
+from src.runtime.validator import build_agent_runtime_pr_validator
 from src.shared.config import AppConfig
 
 from .runner import Worker
@@ -67,6 +74,7 @@ def build_worker(cfg: AppConfig) -> Worker:
         orchestrator=EventOrchestrator(
             pr_orchestrator=PRWorkflowOrchestrator(
                 context_provider=ToolRuntimePRContextProvider(tool_runtime),
+                validator=build_agent_runtime_pr_validator(runner=_build_validation_agent_runner(cfg)),
                 ci_feedback_provider=lambda event: _load_ci_feedback_for_pr_event(
                     event=event,
                     aggregate_store=pr_aggregate_store,
@@ -80,6 +88,11 @@ def build_worker(cfg: AppConfig) -> Worker:
         ),
         output_poster=ToolRuntimePRCommentPoster(tool_runtime),
     )
+
+
+def _build_validation_agent_runner(cfg: AppConfig) -> AgentRunner:
+    """Build the validation-stage runner from provider-neutral runtime config."""
+    return build_agent_runner(cfg.agent_runtime)
 
 
 def _load_ci_feedback_for_pr_event(

@@ -88,14 +88,14 @@ class AzureOpenAIAgentRunner:
 
 
 class AzureOpenAIHTTPClient:
-    """Small stdlib live client for opt-in Azure OpenAI smoke probes.
+    """Small stdlib live client for Azure OpenAI provider calls.
 
     The configured endpoint is expected to be the Azure OpenAI v1 base URL
     (for example ``https://resource.openai.azure.com/openai/v1``), and this
     client calls its ``/responses`` endpoint with the configured deployment as
-    the model. This is intentionally isolated behind ``AzureOpenAIChatClient``
-    so provider SDK or HTTP details do not leak into qaestro's provider-neutral
-    contracts.
+    the model. The same narrow client seam backs explicit live smoke probes and
+    validation-stage Agent Runtime calls, so provider SDK or HTTP details do not
+    leak into qaestro's provider-neutral contracts.
     """
 
     def __init__(self, *, credential: str) -> None:
