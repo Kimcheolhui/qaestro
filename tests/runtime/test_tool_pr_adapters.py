@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from src.adapters.connectors.github import CheckRunResult, CommentResult, FileDiff, PRMeta
+from src.adapters.connectors.github import CheckRunResult, CommentResult, FileDiff, PRMeta, ReviewResult
 from src.adapters.renderers import PRCommentPayload
 from src.core.contracts import EventMeta, EventSource, EventType, PROpened
 from src.runtime.orchestrator import (
@@ -62,6 +62,12 @@ class RecordingRuntime:
             "github.pr.comment.create_or_update": CommentResult(
                 id=9876,
                 html_url="https://github.com/octocat/hello-world/pull/77#issuecomment-9876",
+            ),
+            "github.pr.review.create": ReviewResult(
+                id=4242,
+                html_url="https://github.com/octocat/hello-world/pull/42#pullrequestreview-4242",
+                state="COMMENTED",
+                body="review body",
             ),
         }
 

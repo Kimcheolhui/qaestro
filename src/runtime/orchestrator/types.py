@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from src.adapters.renderers import PRCommentPayload
+from src.adapters.renderers import PRCommentPayload, PRReviewPayload
 from src.core.analyzer import PRAnalysisContext
 from src.core.contracts import BehaviourImpact, CIFeedbackContext, PREvent, QAReport, StrategyResult, ValidationResult
 from src.runtime.stages import WorkflowStage
@@ -57,7 +57,8 @@ class PRWorkflowResult:
     report: QAReport
     triage: PRWorkflowTriage
     comment_payload: PRCommentPayload | None
-    stage_order: tuple[WorkflowStage, ...]
+    review_payload: PRReviewPayload | None = None
+    stage_order: tuple[WorkflowStage, ...] = ()
 
     @property
     def correlation_id(self) -> str:

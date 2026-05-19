@@ -4,7 +4,16 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from src.adapters.connectors.github import ActionsJobResult, CheckRunResult, CommentResult, FileDiff, PRMeta
+from src.adapters.connectors.github import (
+    ActionsJobResult,
+    CheckRunResult,
+    CommentResult,
+    FileDiff,
+    PRMeta,
+    ReviewCommentInput,
+    ReviewResult,
+)
+from src.adapters.renderers import PRReviewPayload
 
 from . import ToolCall, ToolCapability, ToolDefinition
 
@@ -27,6 +36,20 @@ class GitHubPRToolClient(Protocol):
     def list_issue_comments(self, owner: str, repo: str, number: int) -> list[CommentResult]: ...
 
     def update_issue_comment(self, owner: str, repo: str, comment_id: int, body: str) -> CommentResult: ...
+
+    def list_pull_request_reviews(self, owner: str, repo: str, number: int) -> list[ReviewResult]: ...
+
+    def create_pull_request_review(
+        self,
+        owner: str,
+        repo: str,
+        number: int,
+        *,
+        body: str,
+        commit_id: str,
+        event: str = "COMMENT",
+        comments: tuple[ReviewCommentInput, ...] = (),
+    ) -> ReviewResult: ...
 
 
 def build_github_pr_tools(client: GitHubPRToolClient) -> tuple[ToolDefinition, ...]:
@@ -61,6 +84,16 @@ def build_github_pr_tools(client: GitHubPRToolClient) -> tuple[ToolDefinition, .
             name="github.pr.comment.create_or_update",
             capabilities=(ToolCapability.WRITE,),
             handler=lambda call: _create_or_update_comment(client, call),
+        ),
+        ToolDefinition(
+            name="github.pr.review.list",
+            capabilities=(ToolCapability.READ,),
+            handler=lambda call: _list_pull_request_reviews(client, call),
+        ),
+        ToolDefinition(
+            name="github.pr.review.create",
+            capabilities=(ToolCapability.WRITE,),
+            handler=lambda call: _create_pull_request_review(client, call),
         ),
     )
 
@@ -111,6 +144,28 @@ def _create_or_update_comment(client: GitHubPRToolClient, call: ToolCall) -> Com
         if marker and marker in comment.body:
             return client.update_issue_comment(owner, repo, comment.id, persisted_body)
     return client.create_issue_comment(owner, repo, pr_number, persisted_body)
+
+
+def _list_pull_request_reviews(client: GitHubPRToolClient, call: ToolCall) -> tuple[ReviewResult, ...]:
+    owner, repo, pr_number = _repo_pr_input(call)
+    return tuple(client.list_pull_request_reviews(owner, repo, pr_number))
+
+
+def _create_pull_request_review(client: GitHubPRToolClient, call: ToolCall) -> ReviewResult:
+    owner, repo, pr_number = _repo_pr_input(call)
+    payload = PRReviewPayload.from_tool_input(
+        {**call.input, "repo_full_name": f"{owner}/{repo}", "pr_number": pr_number}
+    )
+    prepared = payload.prepared_for_submission()
+    return client.create_pull_request_review(
+        owner,
+        repo,
+        pr_number,
+        body=prepared.body,
+        commit_id=prepared.head_sha,
+        event=prepared.event,
+        comments=prepared.to_client_comments(),
+    )
 
 
 def _persisted_comment_body(body: str, marker: str) -> str:

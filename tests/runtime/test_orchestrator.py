@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from src.adapters.renderers import PRCommentPayload
+from src.adapters.renderers import PRCommentPayload, PRReviewPayload
 from src.core.contracts import (
     ActionType,
     BehaviourImpact,
@@ -147,6 +147,32 @@ def test_event_orchestrator_dispatches_pr_events_to_pr_sub_orchestrator():
     assert result.comment_payload is not None
     assert result.comment_payload.repo_full_name == "Kimcheolhui/qaestro"
     assert result.comment_payload.pr_number == 31
+
+
+def test_pr_workflow_orchestrator_produces_official_review_payload_for_output_stage() -> None:
+    event = PROpened(
+        meta=_event_meta("evt-review-output", EventType.PR_OPENED, "corr-review-output"),
+        repo_full_name="Kimcheolhui/qaestro",
+        pr_number=31,
+        title="feat: add validation",
+        body="",
+        author="Kimcheolhui",
+        base_branch="main",
+        head_branch="feat/review-output",
+        diff_url="https://github.com/Kimcheolhui/qaestro/pull/31.diff",
+        files_changed=(FileChange(path="src/app.py", status="modified", additions=8),),
+        head_sha="abc123",
+    )
+
+    result = PRWorkflowOrchestrator().run(event)
+
+    assert isinstance(result.review_payload, PRReviewPayload)
+    assert result.review_payload.repo_full_name == "Kimcheolhui/qaestro"
+    assert result.review_payload.pr_number == 31
+    assert result.review_payload.head_sha == "abc123"
+    assert result.review_payload.event == "COMMENT"
+    assert "Correlation ID: `corr-review-output`" in result.review_payload.body
+    assert "Runtime Validation Review" in result.review_payload.body
 
 
 def test_event_orchestrator_dispatches_ci_to_ci_sub_orchestrator():

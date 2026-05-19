@@ -6,9 +6,9 @@ import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeoutError
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
-from src.adapters.renderers import PRCommentPayload
+from src.adapters.renderers import PRCommentPayload, PRReviewPayload
 from src.core.contracts import Event
 from src.runtime.orchestrator import CIWorkflowResult, EventOrchestrator, PRWorkflowResult
 from src.shared import get_logger
@@ -25,10 +25,24 @@ class Orchestrator(Protocol):
     def run(self, event: Event) -> PRWorkflowResult | CIWorkflowResult: ...
 
 
+@runtime_checkable
 class OutputPoster(Protocol):
     """Posts rendered PR workflow output to an external system."""
 
     def post_comment(self, payload: PRCommentPayload, *, correlation_id: str) -> object: ...
+
+
+@runtime_checkable
+class ReviewOutputPoster(OutputPoster, Protocol):
+    """Posts both managed summary comments and official PR reviews."""
+
+    def post_outputs(
+        self,
+        payload: PRCommentPayload,
+        *,
+        review_payload: PRReviewPayload | None = None,
+        correlation_id: str,
+    ) -> object: ...
 
 
 class NoopOutputPoster:
@@ -164,8 +178,8 @@ class Worker:
                 lambda: self._orchestrator.run(job.event),
                 timeout_seconds=context.timeout_seconds,
             )
-            if result.comment_payload is not None:
-                self._output_poster.post_comment(result.comment_payload, correlation_id=job.correlation_id)
+            if isinstance(result, PRWorkflowResult) and result.comment_payload is not None:
+                _post_pr_output(self._output_poster, result, correlation_id=job.correlation_id)
             return result
         return self._run_pipeline(job, context)
 
@@ -175,9 +189,21 @@ class Worker:
         # later milestones.
         _ = context.agent_runner
         result = self._orchestrator.run(job.event)
-        if result.comment_payload is not None:
-            self._output_poster.post_comment(result.comment_payload, correlation_id=job.correlation_id)
+        if isinstance(result, PRWorkflowResult) and result.comment_payload is not None:
+            _post_pr_output(self._output_poster, result, correlation_id=job.correlation_id)
         return result
+
+
+def _post_pr_output(poster: OutputPoster, result: PRWorkflowResult, *, correlation_id: str) -> object:
+    if result.comment_payload is None:
+        return None
+    if result.review_payload is not None and isinstance(poster, ReviewOutputPoster):
+        return poster.post_outputs(
+            result.comment_payload,
+            review_payload=result.review_payload,
+            correlation_id=correlation_id,
+        )
+    return poster.post_comment(result.comment_payload, correlation_id=correlation_id)
 
 
 def _run_with_timeout(

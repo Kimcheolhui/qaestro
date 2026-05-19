@@ -22,8 +22,8 @@ from src.runtime.orchestrator import (
     PRWorkflowOrchestrator,
     ToolRuntimeCIContextProvider,
     ToolRuntimePRCheckSnapshotProvider,
-    ToolRuntimePRCommentPoster,
     ToolRuntimePRContextProvider,
+    ToolRuntimePROutputPoster,
 )
 from src.runtime.stages import WorkflowStage
 from src.runtime.tools import RegisteredToolRuntime, StageToolPolicy
@@ -86,7 +86,7 @@ def build_worker(cfg: AppConfig) -> Worker:
                 aggregate_store=pr_aggregate_store,
             ),
         ),
-        output_poster=ToolRuntimePRCommentPoster(tool_runtime),
+        output_poster=ToolRuntimePROutputPoster(tool_runtime),
     )
 
 
@@ -129,7 +129,12 @@ def _build_github_tool_runtime(client: GitHubClient) -> RegisteredToolRuntime:
                     "github.actions.run.jobs",
                     "github.checks.runs_for_ref",
                 ),
-                WorkflowStage.OUTPUT: ("github.pr.comment.create_or_update",),
+                WorkflowStage.OUTPUT: (
+                    "github.pr.view",
+                    "github.pr.comment.create_or_update",
+                    "github.pr.review.list",
+                    "github.pr.review.create",
+                ),
             }
         ),
     )

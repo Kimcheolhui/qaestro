@@ -26,7 +26,7 @@ from urllib.parse import quote, urlencode
 from .auth import GitHubAppAuth
 from .errors import AuthError, GitHubError, NotFoundError, RateLimitError
 from .transport import HTTPResponse, HTTPTransport, UrllibTransport
-from .types import ActionsJobResult, CheckRunResult, CommentResult, FileDiff, PRMeta
+from .types import ActionsJobResult, CheckRunResult, CommentResult, FileDiff, PRMeta, ReviewCommentInput, ReviewResult
 
 # Page size for listing endpoints. Max allowed by GitHub is 100.
 _DEFAULT_PER_PAGE = 100
@@ -187,6 +187,72 @@ class GitHubClient:
             raise GitHubError("unexpected update-comment payload shape")
         return _comment_result_from_payload(data)
 
+    def create_pull_request_review(
+        self,
+        owner: str,
+        repo: str,
+        number: int,
+        *,
+        body: str,
+        commit_id: str,
+        event: str = "COMMENT",
+        comments: tuple[ReviewCommentInput, ...] = (),
+    ) -> ReviewResult:
+        """Create an official pull request review with optional inline comments."""
+        body = body.strip()
+        if not body and not comments:
+            raise ValueError("review body or comments must be provided")
+        if not commit_id.strip():
+            raise ValueError("commit_id must not be empty")
+
+        path = f"/repos/{_segment(owner)}/{_segment(repo)}/pulls/{number}/reviews"
+        payload = json.dumps(
+            {
+                "body": body,
+                "commit_id": commit_id,
+                "event": event,
+                "comments": [_review_comment_payload(comment) for comment in comments],
+            }
+        ).encode("utf-8")
+        resp = self._request(
+            "POST",
+            path,
+            body=payload,
+            extra_headers={"Content-Type": "application/json"},
+        )
+        data = resp.json()
+        if not isinstance(data, dict):
+            raise GitHubError("unexpected create-review payload shape")
+        return _review_result_from_payload(data)
+
+    def list_pull_request_reviews(
+        self,
+        owner: str,
+        repo: str,
+        number: int,
+        *,
+        per_page: int = _DEFAULT_PER_PAGE,
+    ) -> list[ReviewResult]:
+        """List official pull request reviews, walking pagination eagerly."""
+        if not 1 <= per_page <= 100:
+            raise ValueError("per_page must be between 1 and 100")
+
+        results: list[ReviewResult] = []
+        for page in range(1, _MAX_PAGES + 1):
+            query = urlencode({"per_page": per_page, "page": page})
+            path = f"/repos/{_segment(owner)}/{_segment(repo)}/pulls/{number}/reviews?{query}"
+            resp = self._request("GET", path)
+            page_data = resp.json()
+            if not isinstance(page_data, list):
+                raise GitHubError("unexpected pull request reviews payload shape")
+            for item in page_data:
+                if not isinstance(item, dict):
+                    raise GitHubError("unexpected pull request reviews payload shape")
+                results.append(_review_result_from_payload(item))
+            if len(page_data) < per_page:
+                break
+        return results
+
     def list_workflow_run_jobs(
         self,
         owner: str,
@@ -346,6 +412,35 @@ def _comment_result_from_payload(data: dict[str, Any]) -> CommentResult:
         html_url=str(data.get("html_url", "")),
         body=str(data.get("body", "")),
     )
+
+
+def _review_result_from_payload(data: dict[str, Any]) -> ReviewResult:
+    return ReviewResult(
+        id=int(data.get("id", 0)),
+        html_url=str(data.get("html_url", "")),
+        state=str(data.get("state", "")),
+        body=str(data.get("body", "")),
+        commit_id=str(data.get("commit_id", "")),
+    )
+
+
+def _review_comment_payload(comment: ReviewCommentInput) -> dict[str, object]:
+    if not comment.path.strip():
+        raise ValueError("review comment path must not be empty")
+    if not comment.body.strip():
+        raise ValueError("review comment body must not be empty")
+    if comment.line is None:
+        raise ValueError("review comment line is required")
+    payload: dict[str, object] = {
+        "path": comment.path,
+        "body": comment.body,
+        "line": comment.line,
+        "side": comment.side or "RIGHT",
+    }
+    if comment.start_line is not None:
+        payload["start_line"] = comment.start_line
+        payload["start_side"] = comment.start_side or comment.side or "RIGHT"
+    return payload
 
 
 def _file_diff_from_payload(data: dict[str, Any]) -> FileDiff:

@@ -48,6 +48,29 @@ class CommentResult:
 
 
 @dataclass(frozen=True)
+class ReviewCommentInput:
+    """One inline comment submitted as part of a pull request review."""
+
+    path: str
+    body: str
+    line: int | None = None
+    side: str = "RIGHT"
+    start_line: int | None = None
+    start_side: str = ""
+
+
+@dataclass(frozen=True)
+class ReviewResult:
+    """Result of creating or reading a pull request review."""
+
+    id: int
+    html_url: str
+    state: str
+    body: str = ""
+    commit_id: str = ""
+
+
+@dataclass(frozen=True)
 class ActionsJobResult:
     """Result summary for one GitHub Actions job in a workflow run."""
 
