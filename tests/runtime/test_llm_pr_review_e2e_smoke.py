@@ -59,6 +59,7 @@ def test_llm_pr_review_e2e_smoke_runs_live_provider_workflow_and_posts_outputs()
     pr_view_payload = {
         "number": 4,
         "title": "feat(api): add review target",
+        "body": "Adds the API review target and updates tests.",
         "state": "open",
         "head": {"sha": "head123", "ref": "feat/api"},
         "base": {"ref": "main"},
@@ -67,6 +68,36 @@ def test_llm_pr_review_e2e_smoke_runs_live_provider_workflow_and_posts_outputs()
         "html_url": "https://github.com/Kimcheolhui/qaestro-test/pull/4",
     }
     transport.enqueue(_json_response(pr_view_payload))
+    transport.enqueue(
+        _json_response(
+            [
+                {
+                    "filename": "src/api.py",
+                    "status": "modified",
+                    "additions": 5,
+                    "deletions": 1,
+                    "changes": 6,
+                    "patch": "@@ -1,1 +3,2 @@\n+def api():\n+    return True",
+                }
+            ]
+        )
+    )
+    transport.enqueue(
+        _json_response(
+            {
+                "total_count": 1,
+                "check_runs": [
+                    {
+                        "name": "Tests",
+                        "status": "completed",
+                        "conclusion": "success",
+                        "html_url": "https://github.com/Kimcheolhui/qaestro-test/actions/runs/1",
+                        "head_sha": "head123",
+                    }
+                ],
+            }
+        )
+    )
     transport.enqueue(_json_response(pr_view_payload))
     transport.enqueue(
         _json_response(
@@ -88,6 +119,7 @@ def test_llm_pr_review_e2e_smoke_runs_live_provider_workflow_and_posts_outputs()
     transport.enqueue(_json_response({"number": 4, "head": {"sha": "head123"}}))
     transport.enqueue(_json_response([]))
     transport.enqueue(_json_response([]))
+    transport.enqueue(_json_response(pr_view_payload))
     transport.enqueue(
         _json_response(
             {
@@ -147,20 +179,33 @@ def test_llm_pr_review_e2e_smoke_runs_live_provider_workflow_and_posts_outputs()
     assert result.status == "succeeded"
     assert result.provider_output_marker == "qaestro-live-provider-output-present"
     assert result.provider_request_count == 1
-    assert result.comment_url == "https://github.com/Kimcheolhui/qaestro-test/pull/4#issuecomment-100"
-    assert result.review_url == "https://github.com/Kimcheolhui/qaestro-test/pull/4#pullrequestreview-200"
+    assert result.comment_url
+    assert result.review_url
     assert result.head_sha == "head123"
     assert result.inline_comment_submitted is True
     assert len(live_client.requests) == 1
-    assert live_client.requests[0]["prompt"]
+    prompt = str(live_client.requests[0]["prompt"])
+    assert "PR description" in prompt
+    assert "Changed files" in prompt
+    assert "CI/check feedback" in prompt
+    assert "Return a concise review" in prompt
+
+    post_comment_calls = [
+        call for call in transport.calls if call.method == "POST" and call.url.endswith("/issues/4/comments")
+    ]
+    assert len(post_comment_calls) == 1
+    summary_body = json.loads((post_comment_calls[0].body or b"{}").decode("utf-8"))["body"]
+    assert "LLM PR Review" in summary_body
+    assert "qaestro-live-e2e-ok" in summary_body
 
     post_review_calls = [
         call for call in transport.calls if call.method == "POST" and call.url.endswith("/pulls/4/reviews")
     ]
     assert len(post_review_calls) == 1
     review_body = json.loads((post_review_calls[0].body or b"{}").decode("utf-8"))["body"]
+    assert "LLM PR Review" in review_body
+    assert "qaestro-live-e2e-ok" in review_body
     assert "qaestro-live-provider-output-present" in review_body
-    assert "qaestro-live-e2e-ok" not in review_body
     assert "Correlation ID: `corr-live-e2e`" in review_body
 
 

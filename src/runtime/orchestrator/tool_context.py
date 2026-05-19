@@ -88,7 +88,7 @@ class ToolRuntimePRContextProvider:
             repo_full_name=event.repo_full_name,
             pr_number=event.pr_number,
             title=meta.title or event.title,
-            body=event.body,
+            body=meta.body or event.body,
             base_branch=meta.base_ref or event.base_branch,
             head_branch=meta.head_ref or event.head_branch,
             files=tuple(_normalize_file(file) for file in files),

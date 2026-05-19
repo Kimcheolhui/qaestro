@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -21,12 +20,12 @@ from src.adapters.connectors.github import (
     ReviewResult,
     UrllibTransport,
 )
-from src.app.jobs import EventJob
-from src.app.worker import Worker, WorkerStatus
 from src.core.contracts import (
     ActionType,
     BehaviourImpact,
     CIFeedbackContext,
+    CIObservation,
+    CIReadinessState,
     EventMeta,
     EventSource,
     EventType,
@@ -38,18 +37,18 @@ from src.core.contracts import (
     ValidationResult,
 )
 from src.runtime.agent import AzureOpenAIChatClient, build_agent_runner
-from src.runtime.agent.types import AgentRunInput, AgentRunner, AgentRunResult, AgentSessionHandle
+from src.runtime.agent.types import AgentRunInput, AgentRunner, AgentRunResult, AgentSessionHandle, AgentSessionScope
 from src.runtime.orchestrator import (
-    EventOrchestrator,
     InMemoryPRAggregateStore,
+    PRWorkflowDepth,
     PRWorkflowOrchestrator,
+    PRWorkflowTriage,
     ToolRuntimePRContextProvider,
     ToolRuntimePROutputPoster,
 )
 from src.runtime.stages import WorkflowStage
 from src.runtime.tools import RegisteredToolRuntime, StageToolPolicy, ToolAuditEntry, ToolCall, ToolResult
 from src.runtime.tools.github import build_github_pr_tools
-from src.runtime.validator import APIContractProbeRequest, APIContractProbeResult, build_agent_runtime_pr_validator
 from src.shared.config import AgentRuntimeProvider, AppConfig
 
 
@@ -220,21 +219,54 @@ class _RecordingAgentRunner:
         self._delegate.close_session(handle, reason=reason)
 
 
-class _LLMMarkedProbeExecutor:
-    def __init__(self, *, provider_output: Callable[[], str]) -> None:
-        self._provider_output = provider_output
-        self.last_provider_output = ""
+@dataclass(frozen=True)
+class _LLMPRReview:
+    body: str
+    provider_marker: str
 
-    def execute(self, request: APIContractProbeRequest) -> APIContractProbeResult:
-        _ = request
-        details = "llm_provider_inference_completed"
-        if self._provider_output():
-            details = f"{details}: qaestro-live-provider-output-present"
-        self.last_provider_output = details
-        return APIContractProbeResult(
-            outcome=ValidationOutcome.PASS,
-            details=details,
-            artifacts=("agent-runtime://live-provider-inference",),
+
+class _LLMPRReviewValidator:
+    def __init__(
+        self,
+        *,
+        runner: _RecordingAgentRunner,
+        pr_meta: PRMeta,
+        repo_full_name: str,
+        pr_number: int,
+        files: tuple[FileDiff, ...],
+        checks: tuple[CheckRunResult, ...],
+    ) -> None:
+        self._runner = runner
+        self._pr_meta = pr_meta
+        self._repo_full_name = repo_full_name
+        self._pr_number = pr_number
+        self._files = files
+        self._checks = checks
+
+    def validate(self, strategy: StrategyResult) -> tuple[ValidationResult, ...]:
+        return tuple(
+            ValidationResult(action=action, outcome=ValidationOutcome.ERROR, details="PR event context is required.")
+            for action in strategy.actions
+        )
+
+    def validate_for_event(self, *, event: PREvent, strategy: StrategyResult) -> tuple[ValidationResult, ...]:
+        review = _run_unified_llm_review(
+            runner=self._runner,
+            pr_meta=self._pr_meta,
+            repo_full_name=self._repo_full_name,
+            pr_number=self._pr_number,
+            files=self._files,
+            checks=self._checks,
+            correlation_id=event.meta.correlation_id,
+        )
+        return tuple(
+            ValidationResult(
+                action=action,
+                outcome=ValidationOutcome.PASS,
+                details=f"llm_provider_inference_completed: {review.provider_marker}\n\n{review.body}",
+                artifacts=("agent-runtime://live-provider-pr-review",),
+            )
+            for action in strategy.actions
         )
 
 
@@ -275,35 +307,19 @@ def run_llm_pr_review_e2e_smoke(
         client = github_client or _build_smoke_github_client(config=config, environ=env)
         owner, repo = _split_repo(repo_full_name)
         pr_meta = client.get_pull_request(owner, repo, pr_number)
+        runner = _RecordingAgentRunner(
+            build_agent_runner(config.agent_runtime, environ=env, azure_openai_client=azure_openai_client)
+        )
+        files = client.list_pull_request_files(owner, repo, pr_number)
+        checks = client.list_check_runs_for_ref(owner, repo, pr_meta.head_sha)
         review_client = _SmokeReviewClient(client)
         smoke_runtime = _SmokeRuntime(_build_smoke_tool_runtime(review_client))
         aggregate_store = InMemoryPRAggregateStore()
 
         def ci_feedback(event: PREvent) -> CIFeedbackContext:
             aggregate = aggregate_store.apply_pr_event(event)
-            return aggregate.to_ci_feedback_context(
-                readiness=aggregate.evaluate_readiness(current_check_snapshot=()),
-                current_check_snapshot=(),
-            )
+            return _ci_feedback_from_checks(head_sha=event.head_sha, checks=tuple(checks), aggregate=aggregate)
 
-        runner = _RecordingAgentRunner(
-            build_agent_runner(config.agent_runtime, environ=env, azure_openai_client=azure_openai_client)
-        )
-        probe_executor = _LLMMarkedProbeExecutor(provider_output=lambda: runner.output_text)
-        worker = Worker(
-            orchestrator=EventOrchestrator(
-                pr_orchestrator=PRWorkflowOrchestrator(
-                    context_provider=ToolRuntimePRContextProvider(smoke_runtime),
-                    strategy_engine=_SmokeStrategyEngine(),
-                    validator=build_agent_runtime_pr_validator(
-                        runner=runner,
-                        api_contract_probe_executor=probe_executor,
-                    ),
-                    ci_feedback_provider=ci_feedback,
-                ),
-            ),
-            output_poster=ToolRuntimePROutputPoster(smoke_runtime),
-        )
         event = PROpened(
             meta=EventMeta(
                 event_id=correlation,
@@ -315,23 +331,45 @@ def run_llm_pr_review_e2e_smoke(
             repo_full_name=repo_full_name,
             pr_number=pr_number,
             title=pr_meta.title,
-            body="qaestro live-provider PR review E2E smoke for API validation output",
+            body=pr_meta.body,
             author=pr_meta.author,
             base_branch=pr_meta.base_ref,
             head_branch=pr_meta.head_ref,
             diff_url=f"https://github.com/{repo_full_name}/pull/{pr_number}.diff",
             head_sha=pr_meta.head_sha,
         )
-        execution = worker.process(EventJob(event=event, correlation_id=correlation))
-        if execution.status is not WorkerStatus.SUCCEEDED:
+        result = PRWorkflowOrchestrator(
+            context_provider=ToolRuntimePRContextProvider(smoke_runtime),
+            triage_classifier=lambda _context: PRWorkflowTriage(
+                depth=PRWorkflowDepth.NORMAL,
+                rationale="Live-provider E2E smoke forces the full unified PR review path.",
+                allowed_stages=(WorkflowStage.ANALYZER, WorkflowStage.STRATEGY, WorkflowStage.VALIDATOR),
+            ),
+            strategy_engine=_SmokeStrategyEngine(),
+            validator=_LLMPRReviewValidator(
+                runner=runner,
+                pr_meta=pr_meta,
+                repo_full_name=repo_full_name,
+                pr_number=pr_number,
+                files=tuple(files),
+                checks=tuple(checks),
+            ),
+            ci_feedback_provider=ci_feedback,
+        ).run(event)
+        if result.comment_payload is None:
             return LLMPRE2ESmokeResult(
                 status="failed",
                 repo_full_name=repo_full_name,
                 pr_number=pr_number,
                 head_sha=pr_meta.head_sha,
                 correlation_id=correlation,
-                error=execution.error,
+                error="PR workflow did not produce a comment payload",
             )
+        ToolRuntimePROutputPoster(smoke_runtime).post_outputs(
+            result.comment_payload,
+            review_payload=result.review_payload,
+            correlation_id=correlation,
+        )
         output = smoke_runtime.output_evidence()
         return LLMPRE2ESmokeResult(
             status="succeeded",
@@ -342,7 +380,7 @@ def run_llm_pr_review_e2e_smoke(
             comment_url=output.comment_url,
             review_url=output.review_url,
             inline_comment_submitted=review_client.inline_comment_submitted,
-            provider_output_marker=_provider_output_marker(runner=runner, result=execution.result),
+            provider_output_marker=_provider_output_marker(runner=runner, result=result),
             provider_request_count=runner.run_count,
         )
     except Exception as exc:
@@ -353,6 +391,95 @@ def run_llm_pr_review_e2e_smoke(
             correlation_id=correlation,
             error=type(exc).__name__,
         )
+
+
+def _run_unified_llm_review(
+    *,
+    runner: _RecordingAgentRunner,
+    pr_meta: PRMeta,
+    repo_full_name: str,
+    pr_number: int,
+    files: tuple[FileDiff, ...],
+    checks: tuple[CheckRunResult, ...],
+    correlation_id: str,
+) -> _LLMPRReview:
+    session = AgentSessionHandle(
+        session_id=f"llm-pr-review-smoke-{correlation_id}",
+        scope=AgentSessionScope.STAGE,
+        repo_full_name=repo_full_name,
+        pr_number=pr_number,
+        head_sha=pr_meta.head_sha,
+        trigger="llm-pr-review-e2e-smoke",
+        correlation_id=correlation_id,
+    )
+    started = runner.start_session(session)
+    try:
+        result = runner.run(
+            session=started,
+            run_input=AgentRunInput(
+                stage=WorkflowStage.VALIDATOR,
+                prompt=_unified_review_prompt(
+                    repo_full_name=repo_full_name,
+                    pr_number=pr_number,
+                    pr_meta=pr_meta,
+                    files=files,
+                    checks=checks,
+                ),
+                correlation_id=correlation_id,
+                max_turns=1,
+                max_tool_calls=0,
+            ),
+        )
+    finally:
+        runner.close_session(started, reason="llm PR review smoke complete")
+    if not result.ok or not result.output_text.strip():
+        raise RuntimeError("live LLM PR review did not produce review text")
+    return _LLMPRReview(
+        body=_render_llm_review_body(result.output_text),
+        provider_marker="qaestro-live-provider-output-present",
+    )
+
+
+def _ci_feedback_from_checks(
+    *,
+    head_sha: str,
+    checks: tuple[CheckRunResult, ...],
+    aggregate: object,
+) -> CIFeedbackContext:
+    observations = tuple(
+        CIObservation(
+            workflow_name=check.name,
+            conclusion=check.conclusion or check.status,
+            run_url=check.html_url,
+            commit_sha=check.head_sha,
+        )
+        for check in checks
+        if check.head_sha == head_sha and check.status == "completed"
+    )
+    pending = tuple(check.name for check in checks if check.head_sha == head_sha and check.status != "completed")
+    failed = any((check.conclusion or "").lower() in {"failure", "timed_out", "startup_failure"} for check in checks)
+    readiness = (
+        CIReadinessState.WAITING_FOR_CHECKS
+        if pending
+        else CIReadinessState.CHECKS_FAILED
+        if failed
+        else CIReadinessState.READY
+    )
+    historical = getattr(
+        aggregate,
+        "to_ci_feedback_context",
+        lambda **_: CIFeedbackContext(current_head_sha=head_sha, readiness=readiness),
+    )(
+        readiness=getattr(aggregate, "evaluate_readiness", lambda **_: object)(current_check_snapshot=()),
+        current_check_snapshot=(),
+    ).historical_evidence
+    return CIFeedbackContext(
+        current_head_sha=head_sha,
+        readiness=readiness,
+        current_observations=observations,
+        historical_evidence=historical,
+        pending_checks=pending,
+    )
 
 
 def _build_smoke_tool_runtime(client: _SmokeReviewClient) -> RegisteredToolRuntime:
@@ -374,6 +501,62 @@ def _build_smoke_tool_runtime(client: _SmokeReviewClient) -> RegisteredToolRunti
             }
         ),
     )
+
+
+def _unified_review_prompt(
+    *,
+    repo_full_name: str,
+    pr_number: int,
+    pr_meta: PRMeta,
+    files: tuple[FileDiff, ...],
+    checks: tuple[CheckRunResult, ...],
+) -> str:
+    return "\n".join(
+        (
+            "You are qaestro reviewing a GitHub pull request from a QA perspective.",
+            "Use the unified PR context below: PR description, changed files/diff summary, and CI/check feedback.",
+            "Return a concise review that can be posted directly as a PR comment/review. Do not mention secrets.",
+            "",
+            f"Repository: {repo_full_name}",
+            f"Pull request: #{pr_number}",
+            f"Title: {pr_meta.title}",
+            "",
+            "PR description:",
+            _bounded_text(pr_meta.body or "(empty)", limit=2000),
+            "",
+            "Changed files:",
+            *_file_context_lines(files),
+            "",
+            "CI/check feedback:",
+            *_check_context_lines(checks),
+        )
+    )
+
+
+def _file_context_lines(files: tuple[FileDiff, ...]) -> tuple[str, ...]:
+    if not files:
+        return ("- No changed files returned by GitHub.",)
+    return tuple(
+        f"- {file.filename} ({file.status}, +{file.additions}/-{file.deletions})\n{_bounded_text(file.patch or '(patch unavailable)', limit=1200)}"
+        for file in files[:10]
+    )
+
+
+def _check_context_lines(checks: tuple[CheckRunResult, ...]) -> tuple[str, ...]:
+    if not checks:
+        return ("- No check runs returned for the current head.",)
+    return tuple(f"- {check.name}: {check.status}/{check.conclusion or 'pending'}" for check in checks[:20])
+
+
+def _render_llm_review_body(output_text: str) -> str:
+    return "\n".join(("## LLM PR Review", "", output_text.strip()))
+
+
+def _bounded_text(value: str, *, limit: int) -> str:
+    clean = value.strip()
+    if len(clean) <= limit:
+        return clean
+    return f"{clean[:limit].rstrip()}\n... [truncated]"
 
 
 def _build_smoke_github_client(*, config: AppConfig, environ: os._Environ[str] | dict[str, str]) -> GitHubClient:
