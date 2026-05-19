@@ -403,6 +403,7 @@ def _pr_meta_from_payload(data: dict[str, Any]) -> PRMeta:
         author=str(user.get("login", "")),
         draft=bool(data.get("draft", False)),
         html_url=str(data.get("html_url", "")),
+        body=str(data.get("body", "") or ""),
     )
 
 

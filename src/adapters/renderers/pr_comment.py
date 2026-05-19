@@ -239,7 +239,7 @@ def _diff_stat_lines(report: QAReport) -> list[str]:
     ]
 
 
-def _status_counts(stats: dict[str, int]) -> list[tuple[str, int]]:
+def _status_counts(stats: dict[str, int | str]) -> list[tuple[str, int]]:
     """Return known status counters first, then any future counters by name."""
     preferred_order = (
         "files_added",
@@ -250,13 +250,17 @@ def _status_counts(stats: dict[str, int]) -> list[tuple[str, int]]:
         "files_unchanged",
         "files_unknown",
     )
-    known = [(key, stats[key]) for key in preferred_order if key in stats]
+    known = [(key, _int_stat(stats[key])) for key in preferred_order if key in stats]
     extra = sorted(
-        (key, value)
+        (key, _int_stat(value))
         for key, value in stats.items()
         if key.startswith("files_") and key not in {"files_changed", *preferred_order}
     )
     return [(_status_label(key), value) for key, value in (*known, *extra)]
+
+
+def _int_stat(value: int | str) -> int:
+    return value if isinstance(value, int) else 0
 
 
 def _status_label(key: str) -> str:

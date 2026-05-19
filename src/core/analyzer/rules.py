@@ -101,7 +101,7 @@ def _patch_contains_risky_signal(patch: str) -> bool:
     )
 
 
-def _diff_stats(files: tuple[PRFileDiff, ...]) -> dict[str, int]:
+def _diff_stats(files: tuple[PRFileDiff, ...]) -> dict[str, int | str]:
     """Aggregate provider-neutral file counts for report metadata."""
     return {
         "files_changed": len(files),
@@ -114,14 +114,62 @@ def _diff_stats(files: tuple[PRFileDiff, ...]) -> dict[str, int]:
         "files_copied": sum(1 for file in files if file.status is PRFileStatus.COPIED),
         "files_unchanged": sum(1 for file in files if file.status is PRFileStatus.UNCHANGED),
         "files_unknown": sum(1 for file in files if file.status is PRFileStatus.UNKNOWN),
+        "primary_file": _primary_changed_file(files),
+        "primary_line": _primary_added_line(files) or 0,
     }
+
+
+def _primary_changed_file(files: tuple[PRFileDiff, ...]) -> str:
+    for file in files:
+        if file.patch:
+            return file.path
+    return files[0].path if files else ""
+
+
+def _primary_added_line(files: tuple[PRFileDiff, ...]) -> int | None:
+    for file in files:
+        if file.first_added_line is not None and file.first_added_line > 0:
+            return file.first_added_line
+        if file.patch:
+            line = _first_added_line_from_patch(file.patch)
+            if line is not None:
+                return line
+    return None
+
+
+def _first_added_line_from_patch(patch: str) -> int | None:
+    new_line: int | None = None
+    for raw_line in patch.splitlines():
+        if raw_line.startswith("@@"):
+            new_line = _new_line_start_from_hunk(raw_line)
+            continue
+        if new_line is None:
+            continue
+        if raw_line.startswith("+") and not raw_line.startswith("+++"):
+            return new_line
+        if raw_line.startswith("-") and not raw_line.startswith("---"):
+            continue
+        new_line += 1
+    return None
+
+
+def _new_line_start_from_hunk(header: str) -> int | None:
+    try:
+        segment = header.split(" +", maxsplit=1)[1].split(" ", maxsplit=1)[0]
+    except IndexError:
+        return None
+    start = segment.split(",", maxsplit=1)[0].removeprefix("+")
+    try:
+        return int(start)
+    except ValueError:
+        return None
 
 
 def _summary(
     context: PRAnalysisContext,
     areas: tuple[ImpactArea, ...],
     overall_risk: RiskLevel,
-    stats: dict[str, int],
+    stats: dict[str, int | str],
 ) -> str:
     """Build a compact top-level summary for humans and later strategy input."""
     path_groups = ", ".join(area.module for area in areas) or "no path groups"

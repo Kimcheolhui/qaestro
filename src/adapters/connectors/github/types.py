@@ -23,6 +23,7 @@ class PRMeta:
     author: str
     draft: bool
     html_url: str
+    body: str = ""
 
 
 @dataclass(frozen=True)

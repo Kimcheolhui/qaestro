@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import json
+from typing import cast
 
 import pytest
 
-from src.adapters.connectors.github import GitHubClient, ReviewCommentInput
+from src.adapters.connectors.github import GitHubAppAuth, GitHubClient, ReviewCommentInput
 from src.adapters.connectors.github.transport import FakeResponse, FakeTransport
 
 OWNER = "octocat"
@@ -22,7 +23,7 @@ class StaticTokenAuth:
 @pytest.fixture
 def client() -> tuple[GitHubClient, FakeTransport]:
     transport = FakeTransport()
-    return GitHubClient(auth=StaticTokenAuth(), transport=transport), transport
+    return GitHubClient(auth=cast(GitHubAppAuth, StaticTokenAuth()), transport=transport), transport
 
 
 def test_create_pull_request_review_posts_body_head_and_inline_comments(

@@ -61,14 +61,17 @@ class ToolRuntimePRContextProvider:
             PRMeta,
         )
         files = _expect_file_tuple(
-            self._runtime.execute(
-                ToolCall(
-                    stage=WorkflowStage.CONTEXT,
-                    name="github.pr.files",
-                    input=common_input,
-                    correlation_id=event.meta.correlation_id,
-                )
-            ).output
+            _expect_output(
+                self._runtime.execute(
+                    ToolCall(
+                        stage=WorkflowStage.CONTEXT,
+                        name="github.pr.files",
+                        input=common_input,
+                        correlation_id=event.meta.correlation_id,
+                    )
+                ),
+                tuple,
+            )
         )
         unified_diff = _expect_output(
             self._runtime.execute(
@@ -85,7 +88,7 @@ class ToolRuntimePRContextProvider:
             repo_full_name=event.repo_full_name,
             pr_number=event.pr_number,
             title=meta.title or event.title,
-            body=event.body,
+            body=meta.body or event.body,
             base_branch=meta.base_ref or event.base_branch,
             head_branch=meta.head_ref or event.head_branch,
             files=tuple(_normalize_file(file) for file in files),
@@ -131,6 +134,10 @@ def _expect_output(result: object, expected_type: type[PRMeta]) -> PRMeta: ...
 def _expect_output(result: object, expected_type: type[str]) -> str: ...
 
 
+@overload
+def _expect_output(result: object, expected_type: type[tuple[object, ...]]) -> tuple[object, ...]: ...
+
+
 def _expect_output(result: object, expected_type: type[object]) -> object:
     if not isinstance(result, ToolResult):
         raise TypeError("runtime returned a non-ToolResult object")
@@ -167,4 +174,35 @@ def _normalize_file(file: FileDiff) -> PRFileDiff:
         deletions=file.deletions,
         patch=file.patch,
         previous_filename=file.previous_filename,
+        first_added_line=_first_added_line_from_patch(file.patch),
     )
+
+
+def _first_added_line_from_patch(patch: str | None) -> int | None:
+    if not patch:
+        return None
+    new_line: int | None = None
+    for raw_line in patch.splitlines():
+        if raw_line.startswith("@@"):
+            new_line = _new_line_start_from_hunk(raw_line)
+            continue
+        if new_line is None:
+            continue
+        if raw_line.startswith("+") and not raw_line.startswith("+++"):
+            return new_line
+        if raw_line.startswith("-") and not raw_line.startswith("---"):
+            continue
+        new_line += 1
+    return None
+
+
+def _new_line_start_from_hunk(header: str) -> int | None:
+    try:
+        segment = header.split(" +", maxsplit=1)[1].split(" ", maxsplit=1)[0]
+    except IndexError:
+        return None
+    start = segment.split(",", maxsplit=1)[0].removeprefix("+")
+    try:
+        return int(start)
+    except ValueError:
+        return None

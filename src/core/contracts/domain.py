@@ -127,7 +127,7 @@ class BehaviourImpact:
     summary: str
     areas: tuple[ImpactArea, ...]
     overall_risk: RiskLevel
-    raw_diff_stats: dict[str, int] = field(default_factory=dict)
+    raw_diff_stats: dict[str, int | str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
