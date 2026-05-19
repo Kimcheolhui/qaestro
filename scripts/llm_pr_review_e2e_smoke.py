@@ -10,7 +10,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.runtime.smoke.llm_pr_review_e2e import run_llm_pr_review_e2e_smoke
+from tests.smoke.llm_pr_review_e2e import run_llm_pr_review_e2e_smoke
+
 from src.shared.config import load_config
 
 

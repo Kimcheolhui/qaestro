@@ -7,14 +7,10 @@ from pathlib import Path
 from typing import cast
 
 import pytest
+from tests.smoke.llm_pr_review_e2e import LLMPRE2ESmokeResult, SmokeGitHubAuth, run_llm_pr_review_e2e_smoke
 
 from src.adapters.connectors.github import FakeResponse, FakeTransport, GitHubAppAuth, GitHubClient
 from src.runtime.agent.azure_openai import AzureOpenAIClientResponse
-from src.runtime.smoke.llm_pr_review_e2e import (
-    LLMPRE2ESmokeResult,
-    SmokeGitHubAuth,
-    run_llm_pr_review_e2e_smoke,
-)
 from src.shared.config import AgentRuntimeConfig, AgentRuntimeProvider, AppConfig, load_config
 
 
