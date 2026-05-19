@@ -215,6 +215,38 @@ def test_github_pr_comment_renderer_surfaces_ci_feedback_as_distinct_section() -
     assert "old123" in payload.body
 
 
+def test_github_pr_comment_renderer_surfaces_skipped_validation_policy_reason() -> None:
+    report = _qa_report()
+    action = StrategyAction(
+        action_type=ActionType.VERIFY_API_CONTRACT,
+        description="Validate write-like API contract",
+        target="POST /api/users",
+        priority=3,
+        rationale="API surface changed.",
+    )
+    report = QAReport(
+        event_id=report.event_id,
+        repo_full_name=report.repo_full_name,
+        pr_number=report.pr_number,
+        impact=report.impact,
+        strategy=StrategyResult(actions=(action,), reasoning="Runtime validation selected.", confidence=0.4),
+        validations=(
+            ValidationResult(
+                action=action,
+                outcome=ValidationOutcome.SKIPPED,
+                details="needs_approval: write-like API contract probe is not auto-run in Step 6 MVP.",
+            ),
+        ),
+        summary_markdown=report.summary_markdown,
+    )
+
+    payload = GitHubPRCommentRenderer().render(report, correlation_id="corr-validation-policy")
+
+    assert "Validation: skipped" in payload.body
+    assert "needs_approval" in payload.body
+    assert "write-like API contract probe is not auto-run" in payload.body
+
+
 def test_github_pr_comment_renderer_omits_ci_feedback_section_when_absent() -> None:
     payload = GitHubPRCommentRenderer().render(_qa_report(), correlation_id="corr-no-ci")
 

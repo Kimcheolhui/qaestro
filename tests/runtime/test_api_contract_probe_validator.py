@@ -18,7 +18,13 @@ from src.core.contracts import (
 from src.runtime.agent.fake import FakeAgentRunner
 from src.runtime.agent.types import AgentRunInput, AgentRunResult, AgentRunStatus, AgentSessionHandle
 from src.runtime.stages import WorkflowStage
-from src.runtime.tools import AgentFrameworkToolAdapter, RegisteredToolRuntime, StageToolPolicy
+from src.runtime.tools import (
+    AgentFrameworkToolAdapter,
+    RegisteredToolRuntime,
+    StageToolPolicy,
+    ToolCapability,
+    ToolDefinition,
+)
 from src.runtime.validator import (
     APIContractProbeRequest,
     APIContractProbeResult,
@@ -215,8 +221,40 @@ def test_invalid_api_contract_target_is_skipped_before_executor_runs() -> None:
     )
 
     assert validations[0].outcome is ValidationOutcome.SKIPPED
-    assert "unsupported API contract target" in validations[0].details
+    assert "invalid_target" in validations[0].details
     assert executor.requests == []
+
+
+def test_write_like_api_contract_target_needs_approval_before_probe_execution() -> None:
+    executor = RecordingProbeExecutor(APIContractProbeResult(outcome=ValidationOutcome.PASS, details="should not run"))
+    fake_runner = FakeAgentRunner(response="agent should not be asked to select a denied probe")
+    validator = build_agent_runtime_pr_validator(runner=fake_runner, api_contract_probe_executor=executor)
+
+    validation = validator.validate_for_event(
+        event=_pr_opened_event(), strategy=_strategy(_api_contract_action(target="POST /api/users"))
+    )[0]
+
+    assert validation.outcome is ValidationOutcome.SKIPPED
+    assert "needs_approval" in validation.details
+    assert "write-like API contract probe" in validation.details
+    assert "GET, HEAD, OPTIONS" in validation.details
+    assert executor.requests == []
+    assert fake_runner.run_inputs == []
+
+
+def test_write_capable_validation_probe_definition_is_policy_denied_before_executor_runs() -> None:
+    executor = RecordingProbeExecutor(APIContractProbeResult(outcome=ValidationOutcome.PASS, details="should not run"))
+    fake_runner = FakeAgentRunner(response="agent should not be asked to select a denied probe")
+    validator = build_agent_runtime_pr_validator(runner=fake_runner, api_contract_probe_executor=executor)
+    validator._tool_adapter = _write_capable_validation_tool_adapter()
+
+    validation = validator.validate_for_event(event=_pr_opened_event(), strategy=_strategy(_api_contract_action()))[0]
+
+    assert validation.outcome is ValidationOutcome.SKIPPED
+    assert "policy_denied" in validation.details
+    assert "write capability" in validation.details
+    assert executor.requests == []
+    assert fake_runner.run_inputs == []
 
 
 def test_probe_failures_timeouts_and_partial_failures_are_distinguishable() -> None:
@@ -313,3 +351,15 @@ def _empty_validation_tool_adapter() -> AgentFrameworkToolAdapter:
     policy = StageToolPolicy({WorkflowStage.VALIDATOR: ()})
     runtime = RegisteredToolRuntime(tools=(), policy=policy)
     return AgentFrameworkToolAdapter(runtime=runtime, tools=(), policy=policy)
+
+
+def _write_capable_validation_tool_adapter() -> AgentFrameworkToolAdapter:
+    validation_tool = ToolDefinition(
+        name="validation.api_contract.probe",
+        description="Misconfigured write-capable API contract probe",
+        capabilities=(ToolCapability.EXECUTE, ToolCapability.WRITE),
+        handler=lambda call: {"status": "should not run"},
+    )
+    policy = StageToolPolicy({WorkflowStage.VALIDATOR: ("validation.api_contract.probe",)})
+    runtime = RegisteredToolRuntime(tools=(validation_tool,), policy=policy)
+    return AgentFrameworkToolAdapter(runtime=runtime, tools=(validation_tool,), policy=policy)

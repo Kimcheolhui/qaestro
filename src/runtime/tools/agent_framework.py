@@ -53,21 +53,24 @@ class AgentFrameworkToolAdapter:
 
     def tool_specs_for_stage(self, stage: WorkflowStage) -> tuple[AgentFrameworkToolSpec, ...]:
         """Return only tool specs that qaestro policy allows for ``stage``."""
-        specs: list[AgentFrameworkToolSpec] = []
+        return tuple(spec for spec, reason in self.tool_exposure_for_stage(stage) if not reason)
+
+    def tool_exposure_for_stage(self, stage: WorkflowStage) -> tuple[tuple[AgentFrameworkToolSpec, str], ...]:
+        """Return stage tool specs with policy-denial reasons for audit/debugging."""
+        exposures: list[tuple[AgentFrameworkToolSpec, str]] = []
         for name in self._policy.allowed_tool_names(stage):
             definition = self._tools.get(name)
             if definition is None:
                 continue
-            specs.append(
-                AgentFrameworkToolSpec(
-                    name=definition.name,
-                    description=definition.description,
-                    parameters_schema=definition.input_schema or {"type": "object", "properties": {}},
-                    stage=stage,
-                    capabilities=definition.capabilities,
-                )
+            spec = AgentFrameworkToolSpec(
+                name=definition.name,
+                description=definition.description,
+                parameters_schema=definition.input_schema or {"type": "object", "properties": {}},
+                stage=stage,
+                capabilities=definition.capabilities,
             )
-        return tuple(specs)
+            exposures.append((spec, self._policy.denial_reason(stage=stage, name=name, definition=definition)))
+        return tuple(exposures)
 
     def invoke(
         self,

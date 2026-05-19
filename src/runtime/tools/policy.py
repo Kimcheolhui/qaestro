@@ -29,9 +29,18 @@ class StageToolPolicy:
         """Return tool names explicitly exposed to an agent runner for a stage."""
         return tuple(sorted(self._allowed_tools_by_stage.get(stage, frozenset())))
 
-    def check(self, call: ToolCall, definition: ToolDefinition) -> None:
-        allowed_tools = self._allowed_tools_by_stage.get(call.stage, frozenset())
-        if call.name not in allowed_tools:
-            raise ToolPolicyError(f"tool {call.name!r} is not allowed during {call.stage!r} stage")
+    def denial_reason(self, *, stage: WorkflowStage, name: str, definition: ToolDefinition) -> str:
+        """Return a policy-denial reason, or an empty string when allowed."""
+        allowed_tools = self._allowed_tools_by_stage.get(stage, frozenset())
+        if name not in allowed_tools:
+            return f"tool {name!r} is not allowed during {stage!r} stage"
         if ToolCapability.DESTRUCTIVE in definition.capabilities and not self._allow_destructive:
-            raise ToolPolicyError(f"destructive tool {call.name!r} is denied by default")
+            return f"destructive tool {name!r} is denied by default"
+        if stage is WorkflowStage.VALIDATOR and ToolCapability.WRITE in definition.capabilities:
+            return f"write capability on tool {name!r} is denied during validator stage"
+        return ""
+
+    def check(self, call: ToolCall, definition: ToolDefinition) -> None:
+        denial = self.denial_reason(stage=call.stage, name=call.name, definition=definition)
+        if denial:
+            raise ToolPolicyError(denial)
