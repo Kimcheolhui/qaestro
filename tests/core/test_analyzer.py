@@ -68,6 +68,8 @@ def test_analyzer_groups_files_by_observed_path_groups_and_aggregates_risk() -> 
         "files_copied": 0,
         "files_unchanged": 0,
         "files_unknown": 0,
+        "primary_file": "src/api/payments.py",
+        "primary_line": 0,
     }
     assert "src/api/payments.py" in impact.summary
     assert "3 files" in impact.summary
@@ -76,6 +78,30 @@ def test_analyzer_groups_files_by_observed_path_groups_and_aggregates_risk() -> 
         ("src/api", RiskLevel.MEDIUM),
         ("tests/api", RiskLevel.LOW),
     ]
+
+
+def test_analyzer_derives_primary_line_from_diff_hunk_added_line() -> None:
+    context = PRAnalysisContext(
+        repo_full_name="acme-corp/web-api",
+        pr_number=127,
+        title="feat: add endpoint",
+        body="Adds an endpoint.",
+        base_branch="main",
+        head_branch="feat/endpoint",
+        files=(
+            PRFileDiff(
+                path="src/api.py",
+                status=PRFileStatus.MODIFIED,
+                additions=2,
+                patch="@@ -1,1 +3,2 @@\n context\n+def api():\n+    return True",
+            ),
+        ),
+    )
+
+    impact = RuleBasedPRBehaviourAnalyzer().analyze(context)
+
+    assert impact.raw_diff_stats["primary_file"] == "src/api.py"
+    assert impact.raw_diff_stats["primary_line"] == 4
 
 
 def test_analyzer_counts_every_normalized_file_status_in_diff_stats() -> None:
@@ -111,6 +137,8 @@ def test_analyzer_counts_every_normalized_file_status_in_diff_stats() -> None:
         "files_copied": 1,
         "files_unchanged": 1,
         "files_unknown": 1,
+        "primary_file": "src/created.py",
+        "primary_line": 0,
     }
 
 

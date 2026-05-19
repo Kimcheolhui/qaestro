@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import cast
 
-from src.adapters.renderers import GitHubPRCommentRenderer, PRCommentPayload, PRReviewPayload
+from src.adapters.renderers import GitHubPRCommentRenderer, PRCommentPayload, PRReviewComment, PRReviewPayload
 from src.core.analyzer import PRAnalysisContext, RuleBasedPRBehaviourAnalyzer
 from src.core.contracts import (
     BehaviourImpact,
@@ -170,7 +170,48 @@ def _review_payload_for_draft(draft: PRWorkflowDraft) -> PRReviewPayload | None:
         head_sha=draft.event.head_sha,
         body=body,
         event="COMMENT",
+        comments=_review_inline_comments(draft),
     )
+
+
+def _review_inline_comments(draft: PRWorkflowDraft) -> tuple[PRReviewComment, ...]:
+    if not draft.validations:
+        return ()
+    for result in draft.validations:
+        if result.outcome is ValidationOutcome.PASS and result.action.target:
+            path = _review_comment_path(draft)
+            if not path:
+                return ()
+            return (
+                PRReviewComment(
+                    path=path,
+                    body=f"Runtime validation passed for `{result.action.target}`: {result.details}",
+                    line=_review_comment_line(draft),
+                ),
+            )
+    if any(result.outcome is ValidationOutcome.SKIPPED for result in draft.validations):
+        return ()
+    return (
+        PRReviewComment(
+            path=_review_comment_path(draft),
+            body="Runtime validation did not pass; see the review body for details.",
+            line=None,
+        ),
+    )
+
+
+def _review_comment_path(draft: PRWorkflowDraft) -> str:
+    stats = draft.report.impact.raw_diff_stats
+    for key in ("primary_file", "first_file"):
+        value = stats.get(key)
+        if isinstance(value, str) and value.strip():
+            return value
+    return ""
+
+
+def _review_comment_line(draft: PRWorkflowDraft) -> int | None:
+    value = draft.report.impact.raw_diff_stats.get("primary_line")
+    return value if isinstance(value, int) and value > 0 else None
 
 
 def _review_validation_lines(validations: tuple[ValidationResult, ...]) -> list[str]:

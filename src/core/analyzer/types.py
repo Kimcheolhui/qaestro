@@ -53,6 +53,7 @@ class PRFileDiff:
     deletions: int = 0
     patch: str | None = None
     previous_filename: str = ""
+    first_added_line: int | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "status", PRFileStatus.normalize(self.status))
@@ -80,6 +81,7 @@ class PRAnalysisContext:
         deletions: int = 0,
         patch: str | None = None,
         previous_filename: str = "",
+        first_added_line: int | None = None,
     ) -> PRFileDiff:
         """Small convenience constructor for tests and simple context providers."""
         return PRFileDiff(
@@ -89,4 +91,5 @@ class PRAnalysisContext:
             deletions=deletions,
             patch=patch,
             previous_filename=previous_filename,
+            first_added_line=first_added_line,
         )

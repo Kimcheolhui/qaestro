@@ -27,6 +27,7 @@ from src.core.contracts import (
     RiskLevel,
     StrategyAction,
     StrategyResult,
+    ValidationOutcome,
     ValidationResult,
 )
 from src.runtime.orchestrator import (
@@ -164,7 +165,37 @@ def test_pr_workflow_orchestrator_produces_official_review_payload_for_output_st
         head_sha="abc123",
     )
 
-    result = PRWorkflowOrchestrator().run(event)
+    action = StrategyAction(
+        action_type=ActionType.VERIFY_API_CONTRACT,
+        description="verify api",
+        target="GET /health",
+        priority=5,
+        rationale="exercise inline review mapping",
+    )
+
+    class PassingValidator:
+        def validate(self, strategy: StrategyResult) -> tuple[ValidationResult, ...]:
+            return (
+                ValidationResult(
+                    action=action,
+                    outcome=ValidationOutcome.PASS,
+                    details="probe passed",
+                ),
+            )
+
+    class SingleActionStrategy:
+        def plan(
+            self,
+            *,
+            repo_full_name: str,
+            pr_number: int,
+            title: str,
+            impact: BehaviourImpact,
+            ci_feedback: CIFeedbackContext | None = None,
+        ) -> StrategyResult:
+            return StrategyResult(actions=(action,), reasoning="verify API contract", confidence=1.0)
+
+    result = PRWorkflowOrchestrator(strategy_engine=SingleActionStrategy(), validator=PassingValidator()).run(event)
 
     assert isinstance(result.review_payload, PRReviewPayload)
     assert result.review_payload.repo_full_name == "Kimcheolhui/qaestro"
@@ -173,6 +204,9 @@ def test_pr_workflow_orchestrator_produces_official_review_payload_for_output_st
     assert result.review_payload.event == "COMMENT"
     assert "Correlation ID: `corr-review-output`" in result.review_payload.body
     assert "Runtime Validation Review" in result.review_payload.body
+    assert result.review_payload.comments
+    assert result.review_payload.comments[0].path == "src/app.py"
+    assert result.review_payload.comments[0].line is None
 
 
 def test_event_orchestrator_dispatches_ci_to_ci_sub_orchestrator():
