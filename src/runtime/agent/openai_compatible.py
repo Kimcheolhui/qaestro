@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Protocol
 
-from src.runtime.agent.azure_openai import AzureOpenAIAgentRunner, AzureOpenAIChatClient
+from src.runtime.agent.azure_openai import AzureOpenAIAgentRunner, AzureOpenAIChatClient, AzureOpenAIHTTPClient
 from src.runtime.agent.fake import FakeAgentRunner
 from src.runtime.agent.health import AgentRuntimeHealthStatus, check_agent_runtime_health
 from src.runtime.agent.types import AgentRunInput, AgentRunner, AgentRunResult, AgentRunStatus, AgentSessionHandle
@@ -128,14 +128,11 @@ def build_agent_runner(
         )
 
     if config.provider is AgentRuntimeProvider.AZURE_OPENAI:
-        if azure_openai_client is None:
-            raise UnsupportedAgentRuntimeProviderError(
-                "Azure OpenAI runner requires an injected client until a live adapter is configured."
-            )
+        credential = env.get(config.credential_env_var, "")
         return AzureOpenAIAgentRunner(
             config=config,
-            client=azure_openai_client,
-            credential=env.get(config.credential_env_var, ""),
+            client=azure_openai_client or AzureOpenAIHTTPClient(credential=credential),
+            credential=credential,
         )
 
     raise UnsupportedAgentRuntimeProviderError(
