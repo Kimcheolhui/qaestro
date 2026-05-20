@@ -12,6 +12,7 @@ from enum import StrEnum
 from src.core.analyzer import PRAnalysisContext, PRFileDiff, PRFileStatus
 from src.runtime.agent import AgentRunInput, AgentRunStatus, AgentSessionHandle, AgentSessionScope
 from src.runtime.agent.types import AgentRunner
+from src.runtime.prompts import PromptId, load_prompt
 from src.runtime.stages import WorkflowStage
 
 
@@ -118,7 +119,7 @@ class AgentBackedPRWorkflowTriageClassifier:
                 session=session,
                 run_input=AgentRunInput(
                     stage=WorkflowStage.TRIAGE,
-                    prompt=_agent_triage_prompt(),
+                    prompt=load_prompt(PromptId.PR_WORKFLOW_TRIAGE).text,
                     correlation_id=session.correlation_id,
                     context=_agent_triage_context(context),
                     max_turns=self._max_turns,
@@ -139,26 +140,6 @@ class AgentBackedPRWorkflowTriageClassifier:
             return _triage_from_agent_output(result.output_text)
         except ValueError as exc:
             return _fallback_triage(fallback, f"invalid_agent_output: {_safe_error(exc)}")
-
-
-def _agent_triage_prompt() -> str:
-    return """
-You are qaestro's PR workflow triage layer. Choose the bounded workflow depth for this pull request.
-
-Do not classify PRs from path taxonomies alone. docs-only, config-only, and test-only are imperfect labels:
-- documentation can describe deployment, security, migration, or runbook behaviour;
-- configuration can change CI, release, runtime, or provider policy;
-- tests can reveal intended behaviour or coverage gaps.
-
-Judge PR intent, behavioural impact, operational risk, and available evidence. Return only compact JSON:
-{"depth":"noop|lightweight|normal|deep","rationale":"short audit reason","allowed_stages":["analyzer","strategy","validator"]}
-
-Depth guide:
-- noop: qaestro should produce no output for irrelevant generated/metadata noise.
-- lightweight: low-signal changes where a short triage output is enough.
-- normal: behaviour analysis and strategy planning are needed.
-- deep: high-impact/security/deployment/migration changes require validation even if normal policy might skip it.
-""".strip()
 
 
 def _triage_session_handle(context: PRAnalysisContext) -> AgentSessionHandle:
