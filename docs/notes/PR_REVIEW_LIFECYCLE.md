@@ -1,6 +1,6 @@
 ## PR aggregate와 unified review lifecycle
 
-Step 4 논의 과정에서 정리된 PR/CI/ChatOps 통합 모델이다. 구현 순서는 Step 4 이후 이슈로 나누되, 제품 방향은 다음을 기준으로 한다. 현재 PR #53은 `CICompleted` enrichment와 초기 CI workflow boundary까지만 다루며, 아래 aggregate/revision/readiness lifecycle의 본 구현은 #54에서 별도 추적한다.
+Step 4 논의 과정에서 정리된 PR/CI/ChatOps 통합 모델이다. Step 6 이후에는 PR aggregate, CI feedback, runtime validation evidence, managed summary comment, official review output이 같은 lifecycle 위에 올라오기 시작했으며, Step 6.5에서는 이 모델이 current head 기준으로 안전하게 유지되는지 다시 감사하고 보강한다.
 
 - PR, CI, GitHub comment/review, ChatOps mention은 event source별로 따로 수신하되, 판단은 PR 단위 `PRAggregateState`로 모은다.
 - `PRAggregateState` 내부에는 current PR metadata와 대화 history를 두고, head commit별 `PRRevisionState(head_sha)`와 여러 `ReviewRun`을 둔다.
