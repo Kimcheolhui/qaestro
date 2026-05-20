@@ -7,6 +7,7 @@ from pathlib import Path
 from src.app.worker.factory import build_worker
 from src.app.worker.runner import NoopOutputPoster
 from src.runtime.orchestrator import (
+    AgentBackedPRWorkflowTriageClassifier,
     CIWorkflowOrchestrator,
     EventOrchestrator,
     ToolRuntimeCIContextProvider,
@@ -90,6 +91,7 @@ def test_build_worker_wires_github_tool_runtime_for_durable_queue(tmp_path: Path
     pr_orchestrator = orchestrator._pr_orchestrator
     ci_orchestrator = orchestrator._ci_orchestrator
     assert isinstance(pr_orchestrator._context_provider, ToolRuntimePRContextProvider)
+    assert isinstance(pr_orchestrator._triage_classifier, AgentBackedPRWorkflowTriageClassifier)
     assert isinstance(pr_orchestrator._validator, AgentRuntimePRValidator)
     assert pr_orchestrator._ci_feedback_provider is not None
     assert isinstance(ci_orchestrator, CIWorkflowOrchestrator)

@@ -15,6 +15,7 @@ from src.runtime.agent import (
 )
 from src.runtime.agent.types import AgentRunner
 from src.runtime.orchestrator import (
+    AgentBackedPRWorkflowTriageClassifier,
     CIWorkflowOrchestrator,
     EventOrchestrator,
     InMemoryPRAggregateStore,
@@ -70,11 +71,13 @@ def build_worker(cfg: AppConfig) -> Worker:
     client = _build_github_client(cfg)
     tool_runtime = _build_github_tool_runtime(client)
     pr_aggregate_store = InMemoryPRAggregateStore()
+    agent_runner = _build_validation_agent_runner(cfg)
     return Worker(
         orchestrator=EventOrchestrator(
             pr_orchestrator=PRWorkflowOrchestrator(
                 context_provider=ToolRuntimePRContextProvider(tool_runtime),
-                validator=build_agent_runtime_pr_validator(runner=_build_validation_agent_runner(cfg)),
+                triage_classifier=AgentBackedPRWorkflowTriageClassifier(runner=agent_runner),
+                validator=build_agent_runtime_pr_validator(runner=agent_runner),
                 ci_feedback_provider=lambda event: _load_ci_feedback_for_pr_event(
                     event=event,
                     aggregate_store=pr_aggregate_store,

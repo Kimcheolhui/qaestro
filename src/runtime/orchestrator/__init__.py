@@ -29,7 +29,12 @@ from .pr_aggregate import (
 )
 from .pr_context import EventPRContextProvider, PRContextProvider
 from .pr_event_stubs import PRCommentWorkflowOrchestrator, PRReviewWorkflowOrchestrator
-from .pr_triage import PRWorkflowDepth, PRWorkflowTriage, RuleBasedPRWorkflowTriageClassifier
+from .pr_triage import (
+    AgentBackedPRWorkflowTriageClassifier,
+    PRWorkflowDepth,
+    PRWorkflowTriage,
+    RuleBasedPRWorkflowTriageClassifier,
+)
 from .pr_workflow import PRWorkflowOrchestrator, StubPRRuntimeValidator
 from .tool_context import (
     PRCheckSnapshotProvider,
@@ -51,6 +56,7 @@ from .types import (
 )
 
 __all__ = [
+    "AgentBackedPRWorkflowTriageClassifier",
     "CIContextProvider",
     "CIWorkflowDepth",
     "CIWorkflowOrchestrator",

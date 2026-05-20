@@ -30,7 +30,9 @@ from src.core.contracts import (
     ValidationOutcome,
     ValidationResult,
 )
+from src.runtime.agent import AgentRunInput, AgentRunResult, AgentRunStatus, AgentSessionHandle
 from src.runtime.orchestrator import (
+    AgentBackedPRWorkflowTriageClassifier,
     ChatWorkflowOrchestrator,
     CIWorkflowDepth,
     CIWorkflowOrchestrator,
@@ -593,6 +595,103 @@ def test_rule_based_triage_deep_signal_matching_uses_token_boundaries() -> None:
 
     assert false_positive_result.triage.depth is PRWorkflowDepth.LIGHTWEIGHT
     assert deep_signal_result.triage.depth is PRWorkflowDepth.DEEP
+
+
+def test_agent_backed_triage_uses_runner_depth_decision_for_docs_and_config_intent() -> None:
+    class TriageDecisionRunner:
+        def __init__(self) -> None:
+            self.run_inputs: list[AgentRunInput] = []
+
+        def start_session(self, handle: AgentSessionHandle) -> AgentSessionHandle:
+            return handle
+
+        def run(self, *, session: AgentSessionHandle, run_input: AgentRunInput) -> AgentRunResult:
+            self.run_inputs.append(run_input)
+            return AgentRunResult(
+                session=session,
+                stage=run_input.stage,
+                status=AgentRunStatus.SUCCEEDED,
+                output_text=(
+                    '{"depth":"normal","rationale":"Docs and config changes update release policy; '
+                    'run behaviour analysis instead of relying on path-only rules.",'
+                    '"allowed_stages":["analyzer","strategy","validator"]}'
+                ),
+            )
+
+        def close_session(self, handle: AgentSessionHandle, *, reason: str) -> None:
+            del handle, reason
+
+    event = PROpened(
+        meta=_event_meta("evt-agent-triage", EventType.PR_OPENED, "corr-agent-triage"),
+        repo_full_name="Kimcheolhui/qaestro",
+        pr_number=48,
+        title="docs: update release process",
+        body="Clarifies deployment approval policy.",
+        author="Kimcheolhui",
+        base_branch="main",
+        head_branch="docs/release-process",
+        diff_url="https://github.com/Kimcheolhui/qaestro/pull/48.diff",
+        head_sha="abc1234",
+        files_changed=(FileChange(path="docs/release.md", status="modified", additions=2, deletions=1),),
+    )
+    runner = TriageDecisionRunner()
+    classifier = AgentBackedPRWorkflowTriageClassifier(runner=runner, fallback=RuleBasedPRWorkflowTriageClassifier())
+
+    result = PRWorkflowOrchestrator(triage_classifier=classifier).run(event)
+
+    assert result.triage.depth is PRWorkflowDepth.NORMAL
+    assert result.triage.rationale == (
+        "Docs and config changes update release policy; run behaviour analysis instead of relying on path-only rules."
+    )
+    assert result.stage_order[:3] == (WorkflowStage.CONTEXT, WorkflowStage.TRIAGE, WorkflowStage.ANALYZER)
+    assert len(runner.run_inputs) == 1
+    run_input = runner.run_inputs[0]
+    assert run_input.stage is WorkflowStage.TRIAGE
+    assert "Do not classify PRs from path taxonomies alone" in run_input.prompt
+    assert run_input.context is not None
+    assert run_input.context["files"] == (
+        {"path": "docs/release.md", "status": "modified", "additions": 2, "deletions": 1},
+    )
+
+
+def test_agent_backed_triage_falls_back_when_runner_response_is_invalid() -> None:
+    class InvalidTriageRunner:
+        def start_session(self, handle: AgentSessionHandle) -> AgentSessionHandle:
+            return handle
+
+        def run(self, *, session: AgentSessionHandle, run_input: AgentRunInput) -> AgentRunResult:
+            return AgentRunResult(
+                session=session,
+                stage=run_input.stage,
+                status=AgentRunStatus.SUCCEEDED,
+                output_text="not-json",
+            )
+
+        def close_session(self, handle: AgentSessionHandle, *, reason: str) -> None:
+            del handle, reason
+
+    event = PROpened(
+        meta=_event_meta("evt-agent-triage-invalid", EventType.PR_OPENED, "corr-agent-triage-invalid"),
+        repo_full_name="Kimcheolhui/qaestro",
+        pr_number=49,
+        title="docs: update contributor guide",
+        body="Clarifies wording only.",
+        author="Kimcheolhui",
+        base_branch="main",
+        head_branch="docs/contributor-guide",
+        diff_url="https://github.com/Kimcheolhui/qaestro/pull/49.diff",
+        files_changed=(FileChange(path="docs/CONTRIBUTING.md", status="modified", additions=3, deletions=1),),
+    )
+    classifier = AgentBackedPRWorkflowTriageClassifier(
+        runner=InvalidTriageRunner(),
+        fallback=RuleBasedPRWorkflowTriageClassifier(),
+    )
+
+    result = PRWorkflowOrchestrator(triage_classifier=classifier).run(event)
+
+    assert result.triage.depth is PRWorkflowDepth.LIGHTWEIGHT
+    assert "Agent triage unavailable" in result.triage.rationale
+    assert "Small low-signal documentation" in result.triage.rationale
 
 
 def test_pr_workflow_orchestrator_uses_renders_output_contract_for_noop() -> None:
