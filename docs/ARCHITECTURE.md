@@ -11,7 +11,7 @@ flowchart TB
     subgraph Trigger Sources
         DEV["👨‍💻 Developer"]
         GH["GitHub (PR/CI/Comment)"]
-        CHAT["Slack / Teams"]
+        CHAT["Slack / Teams<br/>(Step 7 ChatOps)"]
     end
 
     subgraph Event Ingestion Layer
@@ -31,14 +31,14 @@ flowchart TB
 
     subgraph Output Interface
         PR_OUT["PR 코멘트<br/>(Behaviour Impact Report)"]
-        CHAT_OUT["Slack/Teams 메시지<br/>(대화형 응답)"]
+        CHAT_OUT["Slack/Teams 메시지<br/>(Step 7 대화형 응답)"]
     end
 
     DEV -->|"논의 후 @qaestro 태그"| CHAT
     DEV -->|"PR 생성"| GH
 
     GH -->|"PROpened / PRCommented /<br/> PRReviewed / CICompleted"| GW
-    CHAT -->|"ChatMention<br/>(@qaestro 태그 시 쓰레드 전체 수집)"| GW
+    CHAT -->|"ChatMention<br/>(Step 7: @qaestro 태그 시 쓰레드 수집)"| GW
     GW -->|"EventJob enqueue"| Q
     Q -->|"dequeue + ack"| EI
 
@@ -79,7 +79,7 @@ ChatMention { meta: EventMeta, platform, channel_id, channel_name, author, messa
 
 `FileChange`는 경량 메타데이터(`path`, `status`, `additions`, `deletions`, `previous_filename`)만 보유. 실제 diff 텍스트와 파일 내용은 이벤트에 싣지 않고, runtime에서 별도 fetch 레이어(`GET /repos/{owner}/{repo}/pulls/{number}/files` 등)로 조회한다. 이벤트가 작을수록 queue·persist·replay 비용이 낮아지기 때문.
 
-`ChatMention`은 개발자가 `@qaestro`를 태그했을 때 발생. 쓰레드 전체를 읽고 변경 의도/맥락을 파악하며, 태그 시 요약 메시지가 함께 있으면 보조 맥락으로 활용한다.
+`ChatMention`은 개발자가 `@qaestro`를 태그했을 때 발생한다. 이벤트 타입과 placeholder workflow는 존재하지만 Slack/Teams parser, thread context fetch, response write connector는 Step 7 ChatOps 범위다. Step 6까지의 완료 기준에는 GitHub PR/CI event, validation, managed summary comment, official review output이 포함되고, ChatOps real connector는 포함되지 않는다.
 
 Agent가 채널을 상시 모니터링하지 않음. 개발자가 필요할 때 호출하는 방식.
 
@@ -114,8 +114,8 @@ normalized event
 | Triage / readiness | 수집된 PR·CI·check context를 바탕으로 workflow depth와 final review 가능 여부 결정 | `PRWorkflowTriage`, current head check snapshot |
 | Analysis / strategy | 수집된 context, knowledge read, 제한된 추가 조회 | `knowledge.search` |
 | Agent runtime | provider/session/runner 생성, LLM-backed tool selection 준비 | Step 5에서 BYOK provider 설정과 runner factory 추가 |
-| Validation | strategy가 선택한 runtime probe/test execution. API contract probe는 Step 6 MVP에서 read-only method(`GET`, `HEAD`, `OPTIONS`)만 자동 실행하고, write-like/destructive probe는 `SKIPPED` + `needs_approval`/`policy_denied` reason으로 남긴다. | `validation.api_contract.probe` |
-| Output | PR managed comment, PR review/inline comment, chat response 같은 write action | `github.pr.comment.create_or_update`, 이후 `github.pr.review.create` |
+| Validation | strategy가 선택한 runtime probe/test execution. Step 6 MVP의 기본 API contract executor는 외부 endpoint를 호출하지 않고 명시적 `SKIPPED`를 반환한다. Concrete probe executor를 주입한 경우에도 read-only method(`GET`, `HEAD`, `OPTIONS`)만 자동 probe 대상으로 보고, write-like/destructive probe는 `SKIPPED` + `needs_approval`/`policy_denied` reason으로 남긴다. Azure OpenAI provider live smoke와 external API live probe는 별도 검증이다. | `validation.api_contract.probe` |
+| Output | PR managed summary comment, PR review/inline comment, chat response 같은 write action. Managed summary와 official review는 서로 다른 output surface다. | `github.pr.comment.create_or_update`, `github.pr.review.create` |
 
 Read tool은 맥락 수집과 판단을 돕기 위해 비교적 넓게 허용할 수 있지만, write tool은 output policy를 거쳐야 한다. destructive action은 기본 금지이며, comment 작성·knowledge write 같은 side effect는 correlation id와 중복 방지 정책을 함께 고려한다.
 

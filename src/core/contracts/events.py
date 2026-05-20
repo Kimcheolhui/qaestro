@@ -155,7 +155,7 @@ class CICompleted:
 class ChatMention:
     """The bot was mentioned in a chat channel."""
 
-    # TODO(Step 6): add `parse_slack_mention_event` / `parse_teams_mention_event`
+    # TODO(Step 7): add `parse_slack_mention_event` / `parse_teams_mention_event`
     # parsers to accompany this type.
 
     meta: EventMeta

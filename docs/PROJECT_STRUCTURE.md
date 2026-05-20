@@ -74,7 +74,7 @@ qaestro 구현을 위한 레포 구조. 아키텍처 레이어(Event Ingestion �
 ## 런타임 흐름
 
 ```text
-GitHub / Slack / Teams
+GitHub (현재) / Slack·Teams (Step 7 ChatOps)
     → src.app.gateway
     → src.core.contracts
     → src.runtime.orchestrator
@@ -82,10 +82,10 @@ GitHub / Slack / Teams
     → src.core.strategy
     → src.runtime.validator
     → src.adapters.renderers
-    → GitHub / Slack / Teams
+    → GitHub (managed summary / official review) / Slack·Teams (Step 7)
 ```
 
-`app/gateway`는 외부 payload를 받아 공통 이벤트로 바꾸고, `runtime/orchestrator`는 그 이벤트를 하나의 workflow로 묶어 core 서브모듈들을 호출한다.
+`app/gateway`는 외부 payload를 받아 공통 이벤트로 바꾸고, `runtime/orchestrator`는 그 이벤트를 하나의 workflow로 묶어 core 서브모듈들을 호출한다. 현재 Step 6 이후 구현 범위는 GitHub PR/CI payload와 GitHub output surface이고, Slack/Teams parser·connector·response write는 Step 7 ChatOps에서 `ChatMention` contract 위에 붙인다.
 
 ## 의존 방향
 
@@ -120,7 +120,7 @@ adapters.knowledge  → core.knowledge, shared
 
 ### `app/`
 
-- `app/gateway`: GitHub, Slack/Teams에서 들어오는 payload를 받아 공통 이벤트로 normalize
+- `app/gateway`: 현재 GitHub webhook payload를 받아 공통 이벤트로 normalize한다. Slack/Teams gateway/parser는 `ChatMention` contract 위에 붙는 Step 7 범위다.
 - `app/worker`: `runtime/orchestrator`를 실행하는 background processing entrypoint이자 Agent Runtime/Microsoft Agent Framework runner host
 - `app/cli`: 로컬 replay, fixture 실행, 수동 검증용 엔트리포인트. GitHub App manifest, ChatOps app 설정 등 설치 매니페스트도 CLI 리소스로 관리
 
@@ -135,12 +135,12 @@ adapters.knowledge  → core.knowledge, shared
 
 - `runtime/orchestrator`: Event Router, correlation id, PR/채널/CI 맥락 묶기, workflow state 관리
 - `runtime/agent`: BYOK provider/session 설정, runner factory, fake/real provider 경계를 관리하는 Agent Runtime foundation
-- `runtime/validator`: 실제 런타임 검증 실행. MVP는 `api_contract` probe부터 시작하고, `ui_flow`나 multi-step behaviour probe는 이후 확장
+- `runtime/validator`: 실제 런타임 검증 실행. 현재 MVP는 API contract probe executor seam과 non-live default executor를 제공하고, concrete live probe executor, `ui_flow`, multi-step behaviour probe는 이후 확장
 
 ### `adapters/`
 
-- `adapters/connectors`: GitHub, Slack, Teams, LLM 등 외부 SDK wrapper
-- `adapters/renderers`: PR 코멘트, Slack/Teams 응답 등 채널별 출력 포맷
+- `adapters/connectors`: GitHub connector가 현재 P0 구현이며, Slack/Teams/추가 provider connector는 이후 확장
+- `adapters/renderers`: PR managed summary comment와 official GitHub review payload를 분리해 렌더링한다. Slack/Teams 응답 포맷은 Step 7에서 확장
 - `adapters/knowledge`: markdown, vector, database 등 backing store adapter 구현
 
 ### `shared/`
@@ -149,7 +149,7 @@ adapters.knowledge  → core.knowledge, shared
 
 ### `tests/`
 
-- `tests/fixtures/`: GitHub/Slack/CI raw payload fixture
+- `tests/fixtures/`: 현재 GitHub/CI raw payload fixture 중심이며, Slack/Teams fixture는 Step 7 ChatOps connector와 함께 추가
 - `tests/integration/`: connector + orchestration 통합 테스트
 - `tests/e2e/`: PR 오픈 → 전략 생성 → 검증 → 출력까지 전체 플로우 테스트
 - `tests/replay/`: 실제 PR/채널/CI 사례를 replay하여 regression 방지
