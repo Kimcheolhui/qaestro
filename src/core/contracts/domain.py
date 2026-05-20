@@ -147,7 +147,7 @@ class StrategyAction:
         RUN_TESTS               test file path or directory (e.g. ``tests/``)
         RUN_LINTER              source directory (e.g. ``src/``)
         TYPE_CHECK              source directory or package name
-        CHECK_SECURITY          ``path:line`` or a source file
+        CHECK_SECURITY          security review target, usually ``security:<path group>``
         VERIFY_API_CONTRACT     HTTP method + route (e.g. ``POST /api/login``)
         SMOKE_TEST              endpoint URL or scenario id
         CUSTOM                  free-form — see ``description``

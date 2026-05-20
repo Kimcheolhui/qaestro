@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import PurePosixPath
+
 from src.core.contracts import (
     ActionType,
     BehaviourImpact,
@@ -44,6 +46,8 @@ class RuleBasedPRStrategyEngine:
         )
         actions = (
             *_area_actions(impact),
+            *_configuration_actions(impact),
+            *_security_actions(impact),
             *_baseline_actions(impact),
             *_ci_feedback_actions(ci_feedback),
             *_knowledge_actions(matches),
@@ -58,22 +62,34 @@ class RuleBasedPRStrategyEngine:
 
 def _area_actions(impact: BehaviourImpact) -> tuple[StrategyAction, ...]:
     """Create one focused check suggestion per observed path group."""
-    return tuple(
-        _action(
-            action_type=ActionType.RUN_TESTS,
-            description="Run focused tests or review checks for the observed path group",
-            target=f"tests/{area.module}",
-            area=area,
-            base_priority=2 if area.risk_level is RiskLevel.MEDIUM else 1,
+    actions: list[StrategyAction] = []
+    for area in impact.areas:
+        if _is_low_signal_doc_group(area.module) or _is_configuration_group(area.module):
+            continue
+        target = _test_target_for_area(area)
+        if target is None:
+            continue
+        actions.append(
+            _action(
+                action_type=ActionType.RUN_TESTS,
+                description=_test_action_description(area),
+                target=target,
+                area=area,
+                base_priority=2 if area.risk_level is RiskLevel.MEDIUM else 1,
+            )
         )
-        for area in impact.areas
-        if not _is_low_signal_doc_group(area.module)
-    )
+    return tuple(actions)
 
 
 def _baseline_actions(impact: BehaviourImpact) -> tuple[StrategyAction, ...]:
     actions: list[StrategyAction] = []
-    executable_groups = {area.module for area in impact.areas if not _is_low_signal_doc_group(area.module)}
+    executable_groups = {
+        area.module
+        for area in impact.areas
+        if not _is_low_signal_doc_group(area.module)
+        and not _is_configuration_group(area.module)
+        and not _is_test_only_group(area)
+    }
     if executable_groups:
         actions.append(
             StrategyAction(
@@ -98,6 +114,41 @@ def _knowledge_actions(matches: tuple[KnowledgeEntry, ...]) -> tuple[StrategyAct
                 target=f"knowledge:{entry.key}",
                 priority=4,
                 rationale=entry.summary,
+            )
+        )
+    return tuple(actions)
+
+
+def _configuration_actions(impact: BehaviourImpact) -> tuple[StrategyAction, ...]:
+    actions: list[StrategyAction] = []
+    for area in impact.areas:
+        if not _is_configuration_group(area.module):
+            continue
+        actions.append(
+            StrategyAction(
+                action_type=ActionType.CUSTOM,
+                description="Review configuration or workflow changes for policy and runtime impact",
+                target=f"config:{area.module}",
+                priority=_review_priority(area.risk_level),
+                rationale=f"Configuration-only path group changed: {_affected_files_text(area)}",
+            )
+        )
+    return tuple(actions)
+
+
+def _security_actions(impact: BehaviourImpact) -> tuple[StrategyAction, ...]:
+    """Add explicit security review actions for security-sensitive changes."""
+    actions: list[StrategyAction] = []
+    for area in impact.areas:
+        if _is_low_signal_doc_group(area.module) or not _is_security_sensitive_area(area):
+            continue
+        actions.append(
+            StrategyAction(
+                action_type=ActionType.CHECK_SECURITY,
+                description="Review auth, credential, permission, or secret-handling changes",
+                target=f"security:{area.module}",
+                priority=4 if _is_high(area.risk_level) else 3,
+                rationale=f"Security-sensitive signal observed in {area.module}: {_affected_files_text(area)}",
             )
         )
     return tuple(actions)
@@ -163,14 +214,50 @@ def _action(
     base_priority: int,
 ) -> StrategyAction:
     priority = base_priority + (1 if _is_high(area.risk_level) else 0)
-    files = ", ".join(area.affected_files[:3])
     return StrategyAction(
         action_type=action_type,
         description=description,
         target=target,
         priority=priority,
-        rationale=f"{area.module} path group is {area.risk_level.value} risk; affected files: {files}",
+        rationale=_area_action_rationale(area),
     )
+
+
+def _test_action_description(area: ImpactArea) -> str:
+    if _is_test_only_group(area):
+        return "Run the changed test target directly"
+    return "Run focused tests or review checks for the observed path group"
+
+
+def _area_action_rationale(area: ImpactArea) -> str:
+    prefix = "Test-only path group" if _is_test_only_group(area) else f"{area.module} path group"
+    return f"{prefix} is {area.risk_level.value} risk; affected files: {_affected_files_text(area)}"
+
+
+def _affected_files_text(area: ImpactArea) -> str:
+    return ", ".join(area.affected_files[:3]) or "none"
+
+
+def _test_target_for_area(area: ImpactArea) -> str | None:
+    module = area.module.strip("/")
+    if not module:
+        return None
+    if _is_test_only_group(area):
+        return module
+    if module.startswith("src/"):
+        return _test_target_for_src_module(module)
+    return f"tests/{module}"
+
+
+def _test_target_for_src_module(module: str) -> str:
+    parts = PurePosixPath(module).parts
+    if len(parts) == 1:
+        return "tests/"
+    if len(parts) >= 3 and parts[1] == "adapters" and parts[2] in {"connectors", "renderers"}:
+        return "/".join(("tests", parts[1], parts[2]))
+    if len(parts) >= 2 and parts[1] in {"app", "core", "runtime"}:
+        return "/".join(("tests", parts[1]))
+    return "/".join(("tests", *parts[1:]))
 
 
 def _reasoning(
@@ -272,7 +359,47 @@ def _query_text_from_title_and_impact(title: str, impact: BehaviourImpact) -> st
 
 
 def _is_low_signal_doc_group(path_group: str) -> bool:
-    return path_group.lower() in {"readme.md", "docs", "changelog.md"}
+    normalized = path_group.strip("/").lower()
+    if normalized in {"readme.md", "changelog.md", "contributing.md"}:
+        return True
+    return normalized == "docs" or normalized.startswith("docs/")
+
+
+def _is_test_only_group(area: ImpactArea) -> bool:
+    module = area.module.strip("/").lower()
+    return module == "tests" or module.startswith("tests/")
+
+
+def _is_configuration_group(path_group: str) -> bool:
+    normalized = path_group.strip("/").lower()
+    return normalized in {".github", ".github/workflows", "config", "infra"} or normalized.startswith(
+        (".github/", "config/", "infra/")
+    )
+
+
+def _is_security_sensitive_area(area: ImpactArea) -> bool:
+    haystack = " ".join((area.module, area.description, " ".join(area.affected_files))).lower()
+    return any(
+        signal in haystack
+        for signal in (
+            "auth",
+            "credential",
+            "permission",
+            "private_key",
+            "secret",
+            "signature",
+            "token",
+            "webhook",
+        )
+    )
+
+
+def _review_priority(risk: RiskLevel) -> int:
+    if _is_high(risk):
+        return 4
+    if risk is RiskLevel.MEDIUM:
+        return 2
+    return 1
 
 
 def _is_high(risk: RiskLevel) -> bool:

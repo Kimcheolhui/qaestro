@@ -153,10 +153,12 @@ class CICompleted:
 
 @dataclass(frozen=True)
 class ChatMention:
-    """The bot was mentioned in a chat channel."""
+    """The bot was mentioned in a chat channel.
 
-    # TODO(Step 6): add `parse_slack_mention_event` / `parse_teams_mention_event`
-    # parsers to accompany this type.
+    The normalized event contract exists so queues, replay, and orchestrator
+    dispatch can carry ChatOps triggers. Provider-specific Slack/Teams webhook
+    parsers and real chat connectors are intentionally deferred to Step 7.
+    """
 
     meta: EventMeta
     platform: str  # "slack", "teams"

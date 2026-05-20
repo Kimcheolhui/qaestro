@@ -57,7 +57,7 @@ Cleanup:
 
 MVP stub / 의도된 제한:
 
-- `ChatMention` type은 존재하지만 Slack/Teams parser와 real connector는 Step 7 범위다.
+- `ChatMention` type은 존재하며 queue/replay/dispatcher에서 운반 가능하지만, Slack/Teams raw webhook parser와 real connector는 Step 7 범위다.
 - `PRClosed`는 `docs/BACKLOG.md`의 parking lot에 남아 있다.
 
 ### Step 2 — Event → Worker → Output skeleton
@@ -180,7 +180,7 @@ MVP stub / 의도된 제한:
 
 Step 6.5의 나머지 이슈는 다음 역할로 남긴다.
 
-- #91: analyzer/strategy golden case와 recommendation noise 정리
+- #91: analyzer/strategy golden case와 recommendation noise 정리 — 이번 PR에서 docs-only, config-only, test-only, 실제 `tests/*` target mapping, 보안 민감 변경의 1차 strategy golden case와 rule 보강을 반영했다. 남은 범위는 analyzer path/risk taxonomy 고도화와 더 넓은 runtime/provider case 확장이다.
 - #92: runtime validation outcome 의미론과 sanitization 보강
 - #93: GitHub review output surface guardrail 강화
 - #94: PR aggregate current-head lifecycle replay 보강

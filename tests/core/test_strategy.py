@@ -11,6 +11,7 @@ from src.core.contracts import (
     CIReadinessState,
     ImpactArea,
     RiskLevel,
+    StrategyAction,
 )
 from src.core.knowledge import InMemoryKnowledgeBase, KnowledgeEntry, KnowledgeQuery
 from src.core.strategy import RuleBasedPRStrategyEngine
@@ -86,13 +87,20 @@ def test_strategy_generates_deterministic_actions_from_risk_areas_and_knowledge(
     assert result.knowledge_refs == ("refund-regression",)
     assert result.reasoning.startswith("Medium risk")
     assert [(action.action_type, action.target) for action in result.actions] == [
-        (ActionType.RUN_TESTS, "tests/src/api"),
-        (ActionType.RUN_TESTS, "tests/src/web/checkout"),
+        (ActionType.RUN_TESTS, "tests/api"),
+        (ActionType.RUN_TESTS, "tests/web/checkout"),
         (ActionType.RUN_TESTS, "tests/"),
         (ActionType.CUSTOM, "knowledge:refund-regression"),
     ]
     assert [action.priority for action in result.actions] == [2, 2, 2, 4]
     assert "zero-amount" in result.actions[-1].description
+
+
+def _action_by_target(actions: tuple[StrategyAction, ...], target: str) -> StrategyAction:
+    for action in actions:
+        if action.target == target:
+            return action
+    raise AssertionError(f"No action found for target {target!r}: {actions!r}")
 
 
 def test_strategy_generates_generic_actions_for_repo_observed_groups() -> None:
@@ -118,7 +126,7 @@ def test_strategy_generates_generic_actions_for_repo_observed_groups() -> None:
 
     assert result.actions
     assert result.actions[0].action_type is ActionType.RUN_TESTS
-    assert result.actions[0].target == "tests/src/adapters/connectors/github"
+    assert result.actions[0].target == "tests/adapters/connectors"
     assert result.actions[1].target == "tests/"
 
 
@@ -127,10 +135,16 @@ def test_strategy_skips_low_signal_doc_groups_for_step3_test_actions() -> None:
         summary="Changed documentation only",
         areas=(
             ImpactArea(
-                module="docs",
-                description="modified docs/ARCHITECTURE.md",
+                module="docs/notes",
+                description="modified docs/notes/ARCHITECTURE.md",
                 risk_level=RiskLevel.LOW,
-                affected_files=("docs/ARCHITECTURE.md",),
+                affected_files=("docs/notes/ARCHITECTURE.md",),
+            ),
+            ImpactArea(
+                module="README.md",
+                description="modified README.md",
+                risk_level=RiskLevel.LOW,
+                affected_files=("README.md",),
             ),
             ImpactArea(
                 module="CHANGELOG.md",
@@ -150,6 +164,144 @@ def test_strategy_skips_low_signal_doc_groups_for_step3_test_actions() -> None:
     )
 
     assert result.actions == ()
+
+
+def test_strategy_maps_runtime_and_adapter_changes_to_existing_test_roots() -> None:
+    impact = BehaviourImpact(
+        summary="Changed runtime validation and renderer output",
+        areas=(
+            ImpactArea(
+                module="src/runtime/validator",
+                description="modified src/runtime/validator/agent_runtime.py",
+                risk_level=RiskLevel.MEDIUM,
+                affected_files=("src/runtime/validator/agent_runtime.py",),
+            ),
+            ImpactArea(
+                module="src/adapters/renderers",
+                description="modified src/adapters/renderers/pr_comment.py",
+                risk_level=RiskLevel.MEDIUM,
+                affected_files=("src/adapters/renderers/pr_comment.py",),
+            ),
+        ),
+        overall_risk=RiskLevel.MEDIUM,
+    )
+
+    result = RuleBasedPRStrategyEngine().plan(
+        repo_full_name="Kimcheolhui/qaestro",
+        pr_number=41,
+        title="fix: harden validation output",
+        impact=impact,
+    )
+
+    assert _action_by_target(result.actions, "tests/adapters/renderers").action_type is ActionType.RUN_TESTS
+    assert _action_by_target(result.actions, "tests/runtime").action_type is ActionType.RUN_TESTS
+    assert all("tests/src/" not in action.target for action in result.actions)
+
+
+def test_strategy_keeps_test_only_changes_from_creating_nested_test_targets() -> None:
+    impact = BehaviourImpact(
+        summary="Changed tests only",
+        areas=(
+            ImpactArea(
+                module="tests/runtime",
+                description="modified tests/runtime/test_validation_agent_runner.py",
+                risk_level=RiskLevel.LOW,
+                affected_files=("tests/runtime/test_validation_agent_runner.py",),
+            ),
+        ),
+        overall_risk=RiskLevel.LOW,
+    )
+
+    result = RuleBasedPRStrategyEngine().plan(
+        repo_full_name="Kimcheolhui/qaestro",
+        pr_number=42,
+        title="test: add runtime regression coverage",
+        impact=impact,
+    )
+
+    assert [(action.action_type, action.target) for action in result.actions] == [
+        (ActionType.RUN_TESTS, "tests/runtime"),
+    ]
+    assert result.actions[0].priority == 1
+    assert "Test-only" in result.actions[0].rationale
+
+
+def test_strategy_uses_config_review_instead_of_nested_test_targets_for_config_only_changes() -> None:
+    impact = BehaviourImpact(
+        summary="Changed CI workflow only",
+        areas=(
+            ImpactArea(
+                module=".github/workflows",
+                description="modified .github/workflows/ci.yml",
+                risk_level=RiskLevel.LOW,
+                affected_files=(".github/workflows/ci.yml",),
+            ),
+        ),
+        overall_risk=RiskLevel.LOW,
+    )
+
+    result = RuleBasedPRStrategyEngine().plan(
+        repo_full_name="Kimcheolhui/qaestro",
+        pr_number=43,
+        title="ci: update workflow trigger",
+        impact=impact,
+    )
+
+    assert [(action.action_type, action.target) for action in result.actions] == [
+        (ActionType.CUSTOM, "config:.github/workflows"),
+    ]
+    assert "configuration" in result.actions[0].description.lower()
+
+
+def test_strategy_prioritizes_high_risk_config_review_and_security_signal() -> None:
+    impact = BehaviourImpact(
+        summary="Changed workflow permissions",
+        areas=(
+            ImpactArea(
+                module=".github/workflows",
+                description="modified .github/workflows/deploy.yml with permission changes",
+                risk_level=RiskLevel.HIGH,
+                affected_files=(".github/workflows/deploy.yml",),
+            ),
+        ),
+        overall_risk=RiskLevel.HIGH,
+    )
+
+    result = RuleBasedPRStrategyEngine().plan(
+        repo_full_name="Kimcheolhui/qaestro",
+        pr_number=44,
+        title="ci: update deployment permissions",
+        impact=impact,
+    )
+
+    assert _action_by_target(result.actions, "config:.github/workflows").priority == 4
+    assert _action_by_target(result.actions, "security:.github/workflows").priority == 4
+
+
+def test_strategy_adds_security_review_for_security_sensitive_changes() -> None:
+    impact = BehaviourImpact(
+        summary="Changed webhook auth handling",
+        areas=(
+            ImpactArea(
+                module="src/adapters/connectors/github",
+                description="modified src/adapters/connectors/github/auth.py",
+                risk_level=RiskLevel.HIGH,
+                affected_files=("src/adapters/connectors/github/auth.py",),
+            ),
+        ),
+        overall_risk=RiskLevel.HIGH,
+    )
+
+    result = RuleBasedPRStrategyEngine().plan(
+        repo_full_name="Kimcheolhui/qaestro",
+        pr_number=43,
+        title="fix: update auth token handling",
+        impact=impact,
+    )
+
+    assert (ActionType.CHECK_SECURITY, "security:src/adapters/connectors/github") in [
+        (action.action_type, action.target) for action in result.actions
+    ]
 
 
 def test_strategy_includes_current_head_ci_failure_without_mixing_stale_history() -> None:

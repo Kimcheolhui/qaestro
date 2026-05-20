@@ -317,6 +317,8 @@ qaestro를 구현할 때 참고할 수 있는 모듈 단위 요구사항 문서.
 - 위험 수준에 따라 검증 강도를 다르게 제안
 - MVP 범위에서 API contract, UI flow 중심 checklist 생성
 - knowledge가 연결되면 과거 패턴을 반영할 수 있어야 함
+- Step 6.5 기준으로 docs-only 같은 low-signal 변경은 검증 noise를 만들지 않고, config-only 변경은 설정 리뷰 action으로 분리하며, test-only 변경은 바뀐 test target 자체를 재실행 대상으로 삼는다.
+- `src/*` path group은 실제 `tests/*` 레이아웃으로 매핑하되, 보안 민감 변경은 별도 `CHECK_SECURITY` action을 남긴다.
 
 **제외 범위**
 

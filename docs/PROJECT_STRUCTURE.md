@@ -128,7 +128,7 @@ adapters.knowledge  → core.knowledge, shared
 
 - `core/contracts`: `PROpened`, `PRUpdated`, `PRCommented`, `PRReviewed`, `CICompleted`, `ChatMention` 같은 공통 이벤트 스키마와 domain type
 - `core/analyzer`: diff 분석, 영향 범위 추정, 리스크 분류
-- `core/strategy`: Behaviour Checklist 생성, 검증 전략 선택, 누락 테스트 제안
+- `core/strategy`: Behaviour Checklist 생성, 검증 전략 선택, 누락 테스트 제안. Step 6.5 기준으로 low-signal 변경 noise를 줄이고 실제 `tests/*` 레이아웃에 맞는 target을 제안한다.
 - `core/knowledge`: 고객 QA 지식 자산 접근을 위한 port, query model, in-memory mock
 
 ### `runtime/`
@@ -160,7 +160,7 @@ qaestro는 자유롭게 모든 것을 실행하는 agent가 아니라, 정해진
 
 이 관점은 그룹 구조에도 반영된다.
 
-- `core/strategy`: 규칙과 맥락 안에서 검증 전략을 선택하는 계층
+- `core/strategy`: 규칙과 맥락 안에서 검증 전략을 선택하는 계층. 현재 rule-based MVP는 confidence를 보정된 확률로 취급하지 않고, path group·CI·knowledge evidence를 바탕으로 한 deterministic 우선순위로만 사용한다.
 - `core/knowledge`: Agent가 참고하는 고객별 QA 지식 자산 접근 경계
 - `runtime/validator`: 허용된 probe만 실행하는 계층
 - `runtime/orchestrator`: confidence와 action type에 따라 제안, 검증, 승인 대기 흐름을 통제하는 계층
@@ -207,7 +207,7 @@ tests/e2e/
 
 ## 설계 포인트
 
-- 채널/provider별 코드는 `app/gateway`에 박아 넣기보다 `adapters/connectors/`로 분리하는 편이 확장에 유리하다.
+- 채널/provider별 코드는 `app/gateway`에 박아 넣기보다 `adapters/connectors/`로 분리하는 편이 확장에 유리하다. 현재 `ChatMention` contract와 dispatcher stub은 Step 0~6 foundation에 포함되어 있지만, Slack/Teams parser와 real connector는 Step 7에서 구현한다.
 - 고객별 QA knowledge는 `core/knowledge` port 뒤로 숨기고, 실제 저장소 구현은 `adapters/knowledge`로 미루는 편이 현재 배포 모델과 맞다.
 - Agent Runtime은 `runtime/agent`로 분리해 provider/session/runner 준비를 먼저 다룬다. validation workflow는 이 foundation 없이 먼저 확장하지 않는다.
 - Runtime Validation은 `runtime/validator`로 분리해야 이후 DB 정합성, 성능, multi-step behaviour probe를 붙이기 쉽다.
