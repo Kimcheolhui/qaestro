@@ -2,6 +2,6 @@
 
 from __future__ import annotations
 
-from .rules import RuleBasedPRStrategyEngine
+from .rules import EvidenceBackedPRStrategyEngine, RuleBasedPRStrategyEngine
 
-__all__ = ["RuleBasedPRStrategyEngine"]
+__all__ = ["EvidenceBackedPRStrategyEngine", "RuleBasedPRStrategyEngine"]

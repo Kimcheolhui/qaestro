@@ -85,6 +85,7 @@ def test_github_pr_comment_renderer_turns_qa_report_into_pr_comment_payload():
     assert "Overall risk: **MEDIUM**" in payload.body
     assert "Connector files changed." in payload.body
     assert "Connector files changed" in payload.body
+    assert "### Strategy Evidence" in payload.body
     assert "Run connector tests" in payload.body
     assert "Files changed: `4`" in payload.body
     assert (

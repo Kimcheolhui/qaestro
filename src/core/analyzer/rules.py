@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from collections import defaultdict
-from collections.abc import Iterable
 from pathlib import PurePosixPath
 
 from src.core.contracts import BehaviourImpact, ImpactArea, RiskLevel
@@ -14,14 +12,15 @@ from .types import PRAnalysisContext, PRFileDiff, PRFileStatus
 class RuleBasedPRBehaviourAnalyzer:
     """Deterministic first-pass PR analyzer for the Step 3 vertical slice.
 
-    The analyzer reports observed path groups and simple diff signals. It does
-    not try to define customer modules; adaptive ownership/risk learning belongs
-    in later knowledge/agent workflows.
+    The analyzer reports observed path groups and provider-neutral diff stats.
+    It deliberately does not turn path names, changed-line thresholds, or patch
+    tokens into risk judgments; strategy/agent layers can interpret these facts
+    with repository knowledge and runtime evidence.
     """
 
     def analyze(self, context: PRAnalysisContext) -> BehaviourImpact:
         areas = tuple(_build_impact_areas(context.files))
-        overall_risk = _max_risk((area.risk_level for area in areas), default=RiskLevel.LOW)
+        overall_risk = RiskLevel.NOT_ASSESSED
         stats = _diff_stats(context.files)
         return BehaviourImpact(
             summary=_summary(context, areas, overall_risk, stats),
@@ -32,20 +31,19 @@ class RuleBasedPRBehaviourAnalyzer:
 
 
 def _build_impact_areas(files: tuple[PRFileDiff, ...]) -> list[ImpactArea]:
-    """Group files by observed repository path prefixes."""
-    grouped: dict[str, list[PRFileDiff]] = defaultdict(list)
+    """Group files by observed repository path prefixes without judging risk."""
+    grouped: dict[str, list[PRFileDiff]] = {}
     for file in files:
-        grouped[_path_group_for_file(file.path)].append(file)
+        grouped.setdefault(_path_group_for_file(file.path), []).append(file)
 
     areas: list[ImpactArea] = []
     for path_group in sorted(grouped):
         group_files = tuple(grouped[path_group])
-        risk = _risk_for_path_group_files(group_files)
         areas.append(
             ImpactArea(
                 module=path_group,
                 description=_area_description(path_group, group_files),
-                risk_level=risk,
+                risk_level=RiskLevel.NOT_ASSESSED,
                 affected_files=tuple(file.path for file in group_files),
             )
         )
@@ -69,36 +67,6 @@ def _path_group_for_file(path: str) -> str:
     if len(parts) > 2:
         return "/".join(parts[:-1])
     return parts[0]
-
-
-def _risk_for_path_group_files(files: tuple[PRFileDiff, ...]) -> RiskLevel:
-    """Estimate initial risk from file status, size, and diff content only."""
-    changed_lines = sum(file.additions + file.deletions for file in files)
-    removed_files = any(file.status is PRFileStatus.REMOVED for file in files)
-    risky_patch = any(_patch_contains_risky_signal(file.patch or "") for file in files)
-
-    if removed_files or changed_lines >= 120 or risky_patch:
-        return RiskLevel.HIGH
-    if changed_lines >= 40:
-        return RiskLevel.MEDIUM
-    return RiskLevel.LOW
-
-
-def _patch_contains_risky_signal(patch: str) -> bool:
-    """Detect small, high-signal tokens in a per-file unified diff hunk."""
-    lowered = patch.lower()
-    return any(
-        signal in lowered
-        for signal in (
-            "permission",
-            "auth",
-            "token",
-            "secret",
-            "migration",
-            "drop table",
-            "delete from",
-        )
-    )
 
 
 def _diff_stats(files: tuple[PRFileDiff, ...]) -> dict[str, int | str]:
@@ -177,7 +145,7 @@ def _summary(
     return (
         f"PR #{context.pr_number} ({context.title}) changes {stats['files_changed']} files "
         f"(+{stats['additions']}/-{stats['deletions']}) across {path_groups}. "
-        f"Overall risk is {overall_risk.value}. Lead files: {lead_files}."
+        f"Risk is not assessed by the path-group analyzer. Lead files: {lead_files}."
     )
 
 
@@ -186,18 +154,3 @@ def _area_description(path_group: str, files: tuple[PRFileDiff, ...]) -> str:
     statuses = ", ".join(sorted({file.status.value for file in files}))
     changed_lines = sum(file.additions + file.deletions for file in files)
     return f"{statuses} {len(files)} file(s) under {path_group}, {changed_lines} changed line(s)"
-
-
-def _max_risk(risks: Iterable[RiskLevel], *, default: RiskLevel) -> RiskLevel:
-    """Return the highest risk while keeping empty inputs deterministic."""
-    order = {
-        RiskLevel.NOT_ASSESSED: -1,
-        RiskLevel.LOW: 0,
-        RiskLevel.MEDIUM: 1,
-        RiskLevel.HIGH: 2,
-        RiskLevel.CRITICAL: 3,
-    }
-    risk_values = tuple(risks)
-    if not risk_values:
-        return default
-    return max(risk_values, key=lambda risk: order[risk])

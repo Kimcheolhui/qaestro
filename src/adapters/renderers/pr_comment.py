@@ -136,7 +136,7 @@ class GitHubPRCommentRenderer:
                 "### Impact Areas",
                 *_impact_lines(report),
                 "",
-                "### Recommended Checklist",
+                "### Strategy Evidence",
                 report.strategy.reasoning or "No strategy reasoning provided.",
                 *_action_lines(report),
                 "",
@@ -359,8 +359,8 @@ def _impact_lines(report: QAReport) -> list[str]:
 
 def _action_lines(report: QAReport) -> list[str]:
     if not report.strategy.actions:
-        return ["", "Recommended actions: none."]
-    lines = ["", "Recommended actions:"]
+        return ["", "Evidence-backed actions: none."]
+    lines = ["", "Evidence-backed actions:"]
     lines.extend(
         (
             f"- P{action.priority} **{action.description}** "
