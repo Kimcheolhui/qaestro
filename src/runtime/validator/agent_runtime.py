@@ -16,6 +16,7 @@ from src.core.contracts import (
 )
 from src.runtime.agent.manager import WorkflowAgentSessionManager
 from src.runtime.agent.types import AgentRunInput, AgentRunner, AgentRunStatus, AgentSessionHandle
+from src.runtime.prompts import PromptId, render_prompt
 from src.runtime.stages import WorkflowStage
 from src.runtime.tools import (
     AgentFrameworkToolAdapter,
@@ -439,11 +440,10 @@ def _parse_api_contract_target(target: str) -> tuple[str, str] | None:
 
 
 def _validation_prompt(action: StrategyAction) -> str:
-    return (
-        "Select qaestro's validation.api_contract.probe tool for API contract validation only.\n"
-        "Do not perform destructive or live external API calls unless a configured probe executor does so.\n"
-        f"Action type: {action.action_type.value}\n"
-        f"Target: {action.target}\n"
-        f"Description: {action.description}\n"
-        f"Rationale: {action.rationale}"
+    return render_prompt(
+        PromptId.VALIDATION_API_CONTRACT_PROBE_SELECTION,
+        action_type=action.action_type.value,
+        target=action.target,
+        description=action.description,
+        rationale=action.rationale,
     )

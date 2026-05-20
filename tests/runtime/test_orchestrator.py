@@ -648,6 +648,7 @@ def test_agent_backed_triage_uses_runner_depth_decision_for_docs_and_config_inte
     run_input = runner.run_inputs[0]
     assert run_input.stage is WorkflowStage.TRIAGE
     assert "Do not classify PRs from path taxonomies alone" in run_input.prompt
+    assert "{depth}" not in run_input.prompt
     assert run_input.context is not None
     assert run_input.context["files"] == (
         {"path": "docs/release.md", "status": "modified", "additions": 2, "deletions": 1},
