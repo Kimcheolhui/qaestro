@@ -43,6 +43,8 @@ qaestro 구현을 위한 레포 구조. 아키텍처 레이어(Event Ingestion �
 │   │   └── knowledge/      # QA knowledge port, query model, in-memory mock
 │   ├── runtime/
 │   │   ├── orchestrator/   # workflow 제어, 맥락 묶기
+│   │   ├── agent/          # BYOK provider/session/runner foundation
+│   │   ├── tools/          # stage policy와 ToolRuntime capability boundary
 │   │   └── validator/      # 런타임 검증 실행 (probes)
 │   ├── adapters/
 │   │   ├── connectors/     # GitHub, Slack, LLM 등 외부 SDK wrapper
@@ -97,6 +99,8 @@ app.cli     → runtime.orchestrator, runtime.validator, shared
 
 # runtime → core/adapters/shared
 runtime.orchestrator → core.analyzer, core.strategy, runtime.validator, adapters.renderers, core.contracts
+runtime.agent         → runtime.tools, runtime.stages, shared
+runtime.tools         → core.contracts, adapters.connectors, adapters.renderers, shared
 runtime.validator    → core.contracts, shared
 
 # core → shared
@@ -186,14 +190,15 @@ src/adapters/connectors/    # GitHub connector (P0)
 src/adapters/renderers/
 src/app/gateway/
 src/app/worker/
+src/runtime/agent/          # provider/session/runner foundation
+src/runtime/tools/          # ToolRuntime, stage allowlist, provider capability seam
+src/runtime/validator/      # API contract probe MVP and validation runner wiring
 tests/replay/
 ```
 
 아래는 MVP 이후 시점에 확장한다.
 
 ```text
-src/runtime/agent/          # P1
-src/runtime/validator/      # P1
 src/adapters/connectors/    # ChatOps, LLM connector (P1)
 src/adapters/knowledge/     # concrete backing store adapter (P1)
 src/app/cli/                # P2
