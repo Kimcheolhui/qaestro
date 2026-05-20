@@ -209,7 +209,7 @@ qaestro를 구현할 때 참고할 수 있는 모듈 단위 요구사항 문서.
 - GitHub backend를 CLI로 전환
 - LLM/Agent Framework 기반 tool selection 구현
 - Microsoft Agent Framework SDK 객체와 core/runtime contract의 직접 결합
-- runtime validation probe 전체 구현
+- runtime validation probe 전체 구현. Step 6 이후 현재 범위는 API contract probe executor seam과 non-live default executor이며, preview/staging application endpoint를 실제 호출하는 external API live probe는 별도 후속 범위다.
 
 **선행 조건**
 
@@ -349,7 +349,7 @@ qaestro를 구현할 때 참고할 수 있는 모듈 단위 요구사항 문서.
 
 **필수 요구사항**
 
-- MVP는 API contract probe부터 시작
+- MVP는 API contract probe executor seam부터 시작한다. 기본 executor는 외부 endpoint를 호출하지 않는 non-live `SKIPPED` 결과를 반환하고, concrete probe executor가 주입될 때만 실제 probe verdict를 만든다.
 - 이후 UI flow probe를 추가 가능해야 함
 - timeout, partial failure, skipped result를 표현할 수 있어야 함
 - approval이 필요한 guardrail 결과는 MVP에서 별도 enum을 전제로 하지 않고 `SKIPPED`와 명시적인 reason/details로 표현 가능해야 함
@@ -452,7 +452,7 @@ qaestro를 구현할 때 참고할 수 있는 모듈 단위 요구사항 문서.
 **입력 / 출력**
 
 - 입력: analysis result, strategy result, validation result
-- 출력: PR comment payload, chat response payload
+- 출력: PR managed summary comment payload, official GitHub review/inline comment payload, 이후 chat response payload
 
 **필수 요구사항**
 
@@ -474,7 +474,7 @@ qaestro를 구현할 때 참고할 수 있는 모듈 단위 요구사항 문서.
 
 **완료 기준**
 
-- 같은 결과를 PR / chat 채널에 맞게 다르게 표현 가능
+- 같은 결과를 PR managed summary comment와 official GitHub review surface에 맞게 분리해 표현 가능. ChatOps response는 Step 7에서 같은 aggregate state 위에 추가한다.
 
 ### 13. `adapters/connectors`
 
