@@ -524,16 +524,6 @@ class TestStrategyResult:
         assert sr.knowledge_refs == ()
 
 
-class TestValidationLocation:
-    """ValidationLocation construction and defaults."""
-
-    def test_defaults(self):
-        location = ValidationLocation(path="src/app.py", line=12)
-        assert location.path == "src/app.py"
-        assert location.line == 12
-        assert location.start_line is None
-
-
 class TestValidationResult:
     """ValidationResult defaults."""
 
@@ -545,7 +535,7 @@ class TestValidationResult:
         assert vr.artifacts == ()
         assert vr.locations == ()
 
-    def test_locations_can_be_attached_to_validation_failures(self):
+    def test_can_carry_explicit_review_location(self):
         action = StrategyAction(action_type=ActionType.VERIFY_API_CONTRACT, description="d", target="GET /health")
         location = ValidationLocation(path="src/app.py", line=12, start_line=10)
         vr = ValidationResult(action=action, outcome=ValidationOutcome.FAIL, locations=(location,))
