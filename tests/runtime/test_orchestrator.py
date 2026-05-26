@@ -131,19 +131,19 @@ def _pr_reviewed_event() -> PRReviewed:
     )
 
 
-def _review_output_event() -> PROpened:
+def _review_output_event(*, pr_number: int = 101, head_sha: str = "review-head-sha") -> PROpened:
     return PROpened(
         meta=_event_meta("evt-review-output", EventType.PR_OPENED, "corr-review-output"),
-        repo_full_name="Kimcheolhui/qaestro",
-        pr_number=31,
+        repo_full_name="owner/repo",
+        pr_number=pr_number,
         title="feat: add validation",
         body="",
-        author="Kimcheolhui",
+        author="review-author",
         base_branch="main",
         head_branch="feat/review-output",
-        diff_url="https://github.com/Kimcheolhui/qaestro/pull/31.diff",
+        diff_url=f"https://example.test/owner/repo/pull/{pr_number}.diff",
         files_changed=(FileChange(path="src/app.py", status="modified", additions=8),),
-        head_sha="abc123",
+        head_sha=head_sha,
     )
 
 
@@ -220,9 +220,9 @@ def test_pr_workflow_orchestrator_sets_basic_official_review_payload_fields() ->
         ValidationResult(action=action, outcome=ValidationOutcome.PASS, details="probe passed")
     )
 
-    assert review.repo_full_name == "Kimcheolhui/qaestro"
-    assert review.pr_number == 31
-    assert review.head_sha == "abc123"
+    assert review.repo_full_name == "owner/repo"
+    assert review.pr_number == 101
+    assert review.head_sha == "review-head-sha"
     assert review.event == "COMMENT"
     assert "Correlation ID: `corr-review-output`" in review.body
     assert "Runtime Validation Review" in review.body
