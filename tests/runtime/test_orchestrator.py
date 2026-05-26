@@ -27,6 +27,7 @@ from src.core.contracts import (
     RiskLevel,
     StrategyAction,
     StrategyResult,
+    ValidationLocation,
     ValidationOutcome,
     ValidationResult,
 )
@@ -152,7 +153,7 @@ def test_event_orchestrator_dispatches_pr_events_to_pr_sub_orchestrator():
     assert result.comment_payload.pr_number == 31
 
 
-def test_pr_workflow_orchestrator_produces_official_review_payload_for_output_stage() -> None:
+def test_pr_workflow_orchestrator_keeps_passing_validation_evidence_out_of_inline_comments() -> None:
     event = PROpened(
         meta=_event_meta("evt-review-output", EventType.PR_OPENED, "corr-review-output"),
         repo_full_name="Kimcheolhui/qaestro",
@@ -172,7 +173,7 @@ def test_pr_workflow_orchestrator_produces_official_review_payload_for_output_st
         description="verify api",
         target="GET /health",
         priority=5,
-        rationale="exercise inline review mapping",
+        rationale="exercise validation review evidence",
     )
 
     class PassingValidator:
@@ -206,9 +207,168 @@ def test_pr_workflow_orchestrator_produces_official_review_payload_for_output_st
     assert result.review_payload.event == "COMMENT"
     assert "Correlation ID: `corr-review-output`" in result.review_payload.body
     assert "Runtime Validation Review" in result.review_payload.body
-    assert result.review_payload.comments
+    assert "**PASS** `GET /health`: probe passed" in result.review_payload.body
+    assert result.review_payload.comments == ()
+
+
+def test_pr_workflow_orchestrator_keeps_skipped_validation_evidence_out_of_inline_comments() -> None:
+    event = PROpened(
+        meta=_event_meta("evt-review-skipped-output", EventType.PR_OPENED, "corr-review-skipped-output"),
+        repo_full_name="Kimcheolhui/qaestro",
+        pr_number=31,
+        title="feat: add validation",
+        body="",
+        author="Kimcheolhui",
+        base_branch="main",
+        head_branch="feat/review-output",
+        diff_url="https://github.com/Kimcheolhui/qaestro/pull/31.diff",
+        files_changed=(FileChange(path="src/app.py", status="modified", additions=8),),
+        head_sha="abc123",
+    )
+
+    action = StrategyAction(
+        action_type=ActionType.VERIFY_API_CONTRACT,
+        description="verify api",
+        target="POST /orders",
+        priority=5,
+        rationale="write-like probe requires approval",
+    )
+
+    class SkippedValidator:
+        def validate(self, strategy: StrategyResult) -> tuple[ValidationResult, ...]:
+            return (
+                ValidationResult(
+                    action=action,
+                    outcome=ValidationOutcome.SKIPPED,
+                    details="needs approval",
+                ),
+            )
+
+    class SingleActionStrategy:
+        def plan(
+            self,
+            *,
+            repo_full_name: str,
+            pr_number: int,
+            title: str,
+            impact: BehaviourImpact,
+            ci_feedback: CIFeedbackContext | None = None,
+        ) -> StrategyResult:
+            return StrategyResult(actions=(action,), reasoning="verify API contract", confidence=1.0)
+
+    result = PRWorkflowOrchestrator(strategy_engine=SingleActionStrategy(), validator=SkippedValidator()).run(event)
+
+    assert isinstance(result.review_payload, PRReviewPayload)
+    assert "**SKIPPED** `POST /orders`: needs approval" in result.review_payload.body
+    assert result.review_payload.comments == ()
+
+
+def test_pr_workflow_orchestrator_creates_inline_comment_for_mapped_validation_failure() -> None:
+    event = PROpened(
+        meta=_event_meta("evt-review-fail-output", EventType.PR_OPENED, "corr-review-fail-output"),
+        repo_full_name="Kimcheolhui/qaestro",
+        pr_number=31,
+        title="feat: add validation",
+        body="",
+        author="Kimcheolhui",
+        base_branch="main",
+        head_branch="feat/review-output",
+        diff_url="https://github.com/Kimcheolhui/qaestro/pull/31.diff",
+        files_changed=(FileChange(path="src/app.py", status="modified", additions=8),),
+        head_sha="abc123",
+    )
+
+    action = StrategyAction(
+        action_type=ActionType.VERIFY_API_CONTRACT,
+        description="verify api",
+        target="GET /health",
+        priority=5,
+        rationale="exercise mapped validation failure",
+    )
+
+    class FailingValidator:
+        def validate(self, strategy: StrategyResult) -> tuple[ValidationResult, ...]:
+            return (
+                ValidationResult(
+                    action=action,
+                    outcome=ValidationOutcome.FAIL,
+                    details="expected 200, got 500",
+                    locations=(ValidationLocation(path="src/app.py", line=12),),
+                ),
+            )
+
+    class SingleActionStrategy:
+        def plan(
+            self,
+            *,
+            repo_full_name: str,
+            pr_number: int,
+            title: str,
+            impact: BehaviourImpact,
+            ci_feedback: CIFeedbackContext | None = None,
+        ) -> StrategyResult:
+            return StrategyResult(actions=(action,), reasoning="verify API contract", confidence=1.0)
+
+    result = PRWorkflowOrchestrator(strategy_engine=SingleActionStrategy(), validator=FailingValidator()).run(event)
+
+    assert isinstance(result.review_payload, PRReviewPayload)
+    assert len(result.review_payload.comments) == 1
     assert result.review_payload.comments[0].path == "src/app.py"
-    assert result.review_payload.comments[0].line is None
+    assert result.review_payload.comments[0].line == 12
+    assert "Runtime validation failed" in result.review_payload.comments[0].body
+    assert "expected 200, got 500" in result.review_payload.comments[0].body
+
+
+def test_pr_workflow_orchestrator_degrades_unmapped_validation_failure_into_review_body() -> None:
+    event = PROpened(
+        meta=_event_meta("evt-review-unmapped-fail", EventType.PR_OPENED, "corr-review-unmapped-fail"),
+        repo_full_name="Kimcheolhui/qaestro",
+        pr_number=31,
+        title="feat: add validation",
+        body="",
+        author="Kimcheolhui",
+        base_branch="main",
+        head_branch="feat/review-output",
+        diff_url="https://github.com/Kimcheolhui/qaestro/pull/31.diff",
+        files_changed=(FileChange(path="src/app.py", status="modified", additions=8),),
+        head_sha="abc123",
+    )
+
+    action = StrategyAction(
+        action_type=ActionType.VERIFY_API_CONTRACT,
+        description="verify api",
+        target="GET /health",
+        priority=5,
+        rationale="exercise unmapped validation failure",
+    )
+
+    class FailingValidator:
+        def validate(self, strategy: StrategyResult) -> tuple[ValidationResult, ...]:
+            return (
+                ValidationResult(
+                    action=action,
+                    outcome=ValidationOutcome.FAIL,
+                    details="expected 200, got 500",
+                ),
+            )
+
+    class SingleActionStrategy:
+        def plan(
+            self,
+            *,
+            repo_full_name: str,
+            pr_number: int,
+            title: str,
+            impact: BehaviourImpact,
+            ci_feedback: CIFeedbackContext | None = None,
+        ) -> StrategyResult:
+            return StrategyResult(actions=(action,), reasoning="verify API contract", confidence=1.0)
+
+    result = PRWorkflowOrchestrator(strategy_engine=SingleActionStrategy(), validator=FailingValidator()).run(event)
+
+    assert isinstance(result.review_payload, PRReviewPayload)
+    assert "**FAIL** `GET /health`: expected 200, got 500" in result.review_payload.body
+    assert result.review_payload.comments == ()
 
 
 def test_event_orchestrator_dispatches_ci_to_ci_sub_orchestrator():

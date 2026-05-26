@@ -190,6 +190,20 @@ class ValidationOutcome(Enum):
 
 
 @dataclass(frozen=True)
+class ValidationLocation:
+    """A concrete code location that validation evidence can be attached to.
+
+    Runtime validation results are PR/run-level evidence by default. Populate this
+    only when the validator can explicitly tie the result to a file/line/range;
+    output code must not infer a location from generic primary-file fallbacks.
+    """
+
+    path: str
+    line: int
+    start_line: int | None = None
+
+
+@dataclass(frozen=True)
 class ValidationResult:
     """Result of a single validation action."""
 
@@ -198,6 +212,7 @@ class ValidationResult:
     details: str = ""
     duration_seconds: float = 0.0
     artifacts: tuple[str, ...] = ()
+    locations: tuple[ValidationLocation, ...] = ()
 
 
 @dataclass(frozen=True)

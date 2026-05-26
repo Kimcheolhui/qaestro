@@ -19,6 +19,7 @@ from .domain import (
     RiskLevel,
     StrategyAction,
     StrategyResult,
+    ValidationLocation,
     ValidationOutcome,
     ValidationResult,
 )
@@ -67,6 +68,7 @@ __all__ = [
     "RiskLevel",
     "StrategyAction",
     "StrategyResult",
+    "ValidationLocation",
     "ValidationOutcome",
     "ValidationResult",
     "parse_github_ci_event",

@@ -175,43 +175,25 @@ def _review_payload_for_draft(draft: PRWorkflowDraft) -> PRReviewPayload | None:
 
 
 def _review_inline_comments(draft: PRWorkflowDraft) -> tuple[PRReviewComment, ...]:
-    if not draft.validations:
-        return ()
+    comments: list[PRReviewComment] = []
     for result in draft.validations:
-        if result.outcome is ValidationOutcome.PASS and result.action.target:
-            path = _review_comment_path(draft)
-            if not path:
-                return ()
-            return (
+        if result.outcome is not ValidationOutcome.FAIL:
+            continue
+        for location in result.locations:
+            if not location.path.strip() or location.line <= 0:
+                continue
+            target = result.action.target or result.action.description
+            detail = result.details or result.action.rationale
+            suffix = f": {detail}" if detail else ""
+            comments.append(
                 PRReviewComment(
-                    path=path,
-                    body=f"Runtime validation passed for `{result.action.target}`: {result.details}",
-                    line=_review_comment_line(draft),
-                ),
+                    path=location.path,
+                    body=f"Runtime validation failed for `{target}`{suffix}",
+                    line=location.line,
+                    start_line=location.start_line,
+                )
             )
-    if any(result.outcome is ValidationOutcome.SKIPPED for result in draft.validations):
-        return ()
-    return (
-        PRReviewComment(
-            path=_review_comment_path(draft),
-            body="Runtime validation did not pass; see the review body for details.",
-            line=None,
-        ),
-    )
-
-
-def _review_comment_path(draft: PRWorkflowDraft) -> str:
-    stats = draft.report.impact.raw_diff_stats
-    for key in ("primary_file", "first_file"):
-        value = stats.get(key)
-        if isinstance(value, str) and value.strip():
-            return value
-    return ""
-
-
-def _review_comment_line(draft: PRWorkflowDraft) -> int | None:
-    value = draft.report.impact.raw_diff_stats.get("primary_line")
-    return value if isinstance(value, int) and value > 0 else None
+    return tuple(comments)
 
 
 def _review_validation_lines(validations: tuple[ValidationResult, ...]) -> list[str]:
