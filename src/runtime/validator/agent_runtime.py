@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from time import monotonic
 from typing import Protocol
@@ -296,7 +297,7 @@ class AgentRuntimePRValidator:
         return ValidationResult(
             action=action,
             outcome=result.outcome,
-            details=result.details,
+            details=_sanitize_pr_facing_details(result.details),
             duration_seconds=result.duration_seconds or elapsed,
             artifacts=result.artifacts,
         )
@@ -402,6 +403,19 @@ def _agent_runner_error_details(*, kind: str, exc: Exception) -> str:
 
 def _agent_runner_status_details(status: AgentRunStatus) -> str:
     return f"agent_runner: Agent Runtime validation ended with status {status.name}."
+
+
+_SECRET_ASSIGNMENT_PATTERN = re.compile(r"(?i)\b(token|password|secret|api[_-]?key|credential)\s*=\s*[^\s,;]+")
+_URL_PATTERN = re.compile(r"https?://[^\s,;)]+")
+
+
+def _sanitize_pr_facing_details(details: str) -> str:
+    """Remove common credential and endpoint fragments from PR-facing details."""
+    sanitized = _SECRET_ASSIGNMENT_PATTERN.sub(
+        lambda match: f"{match.group(1)}=<redacted>",
+        details,
+    )
+    return _URL_PATTERN.sub("<redacted-url>", sanitized)
 
 
 def _api_contract_probe_request(

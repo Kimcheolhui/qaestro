@@ -110,6 +110,23 @@ class RaisingAgentRunner(FakeAgentRunner):
         raise RuntimeError(self._error)
 
 
+class StatusAgentRunner(FakeAgentRunner):
+    def __init__(self, *, status: AgentRunStatus, error: str) -> None:
+        super().__init__()
+        self._status = status
+        self._error = error
+
+    def run(self, *, session: AgentSessionHandle, run_input: AgentRunInput) -> AgentRunResult:
+        self.run_inputs.append(run_input)
+        return AgentRunResult(
+            session=session,
+            stage=run_input.stage,
+            status=self._status,
+            error=self._error,
+            allowed_tool_names=run_input.allowed_tool_names,
+        )
+
+
 def test_agent_runner_errors_are_sanitized_before_validation_details() -> None:
     executor = RecordingProbeExecutor(APIContractProbeResult(outcome=ValidationOutcome.PASS, details="should not run"))
     failing_runner = FailingAgentRunner(error="provider failed token=secret-token endpoint=https://private.example")
@@ -138,6 +155,88 @@ def test_agent_runner_errors_are_sanitized_before_validation_details() -> None:
     assert "RuntimeError" in raised_result.details
     assert "hunter2" not in raised_result.details
     assert "private.example" not in raised_result.details
+
+
+def test_agent_runner_timeout_and_cancelled_statuses_are_validation_errors() -> None:
+    executor = RecordingProbeExecutor(APIContractProbeResult(outcome=ValidationOutcome.PASS, details="should not run"))
+    for status in (AgentRunStatus.TIMEOUT, AgentRunStatus.CANCELLED):
+        runner = StatusAgentRunner(status=status, error="token=secret-token endpoint=https://private.example")
+        validator = build_agent_runtime_pr_validator(runner=runner, api_contract_probe_executor=executor)
+
+        validation = validator.validate_for_event(event=_pr_opened_event(), strategy=_strategy(_api_contract_action()))[
+            0
+        ]
+
+        assert validation.outcome is ValidationOutcome.ERROR
+        assert status.name in validation.details
+        assert "secret-token" not in validation.details
+        assert "private.example" not in validation.details
+        assert executor.requests == []
+
+
+def test_validation_session_closes_after_runner_failure_and_exception() -> None:
+    executor = RecordingProbeExecutor(APIContractProbeResult(outcome=ValidationOutcome.PASS, details="should not run"))
+
+    failing_runner = FailingAgentRunner(error="provider failed token=secret-token")
+    failing_validator = build_agent_runtime_pr_validator(runner=failing_runner, api_contract_probe_executor=executor)
+    failing_validator.validate_for_event(event=_pr_opened_event(), strategy=_strategy(_api_contract_action()))
+
+    assert failing_runner.closed_sessions == [
+        (failing_runner.started_sessions[0].session_id, "validation stage complete")
+    ]
+
+    raising_runner = RaisingAgentRunner(error="transport crashed password=hunter2")
+    raising_validator = build_agent_runtime_pr_validator(runner=raising_runner, api_contract_probe_executor=executor)
+    raising_validator.validate_for_event(event=_pr_opened_event(), strategy=_strategy(_api_contract_action()))
+
+    assert raising_runner.closed_sessions == [
+        (raising_runner.started_sessions[0].session_id, "validation stage complete")
+    ]
+
+
+def test_validation_session_closes_after_executor_timeout_and_exception() -> None:
+    timeout_runner = FakeAgentRunner(response="agent selected validation.api_contract.probe")
+    timeout_validator = build_agent_runtime_pr_validator(
+        runner=timeout_runner,
+        api_contract_probe_executor=RecordingProbeExecutor(TimeoutError("token=secret-token")),
+    )
+    timeout_validator.validate_for_event(event=_pr_opened_event(), strategy=_strategy(_api_contract_action()))
+
+    assert timeout_runner.closed_sessions == [
+        (timeout_runner.started_sessions[0].session_id, "validation stage complete")
+    ]
+
+    exception_runner = FakeAgentRunner(response="agent selected validation.api_contract.probe")
+    exception_validator = build_agent_runtime_pr_validator(
+        runner=exception_runner,
+        api_contract_probe_executor=RecordingProbeExecutor(RuntimeError("password=hunter2")),
+    )
+    exception_validator.validate_for_event(event=_pr_opened_event(), strategy=_strategy(_api_contract_action()))
+
+    assert exception_runner.closed_sessions == [
+        (exception_runner.started_sessions[0].session_id, "validation stage complete")
+    ]
+
+
+def test_executor_supplied_details_are_sanitized_before_pr_facing_validation_result() -> None:
+    executor = RecordingProbeExecutor(
+        APIContractProbeResult(
+            outcome=ValidationOutcome.FAIL,
+            details="probe failed token=secret-token endpoint=https://private.example password=hunter2",
+        )
+    )
+    validator = build_agent_runtime_pr_validator(
+        runner=FakeAgentRunner(response="agent selected validation.api_contract.probe"),
+        api_contract_probe_executor=executor,
+    )
+
+    validation = validator.validate_for_event(event=_pr_opened_event(), strategy=_strategy(_api_contract_action()))[0]
+
+    assert validation.outcome is ValidationOutcome.FAIL
+    assert "probe failed" in validation.details
+    assert "secret-token" not in validation.details
+    assert "private.example" not in validation.details
+    assert "hunter2" not in validation.details
 
 
 def test_successful_probe_uses_wall_clock_duration_when_executor_duration_is_missing() -> None:
