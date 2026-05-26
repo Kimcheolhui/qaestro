@@ -238,7 +238,7 @@ def test_review_payload_rejects_invalid_inline_comment_shapes() -> None:
         raise AssertionError("invalid inline review comment shape was not rejected")
 
 
-def test_output_poster_preflights_review_before_summary_comment() -> None:
+def test_output_poster_preflights_review_create_before_summary_comment() -> None:
     runtime = RecordingRuntime(current_head_sha="new-head")
     poster = ToolRuntimePROutputPoster(runtime)
     comment_payload = PRCommentPayload(repo_full_name="octocat/hello-world", pr_number=7, body="summary body")
@@ -280,3 +280,47 @@ def test_output_poster_adds_correlation_marker_before_duplicate_lookup() -> None
 
     assert result == existing
     assert [call.name for call in runtime.calls] == ["github.pr.view", "github.pr.review.list"]
+
+
+def test_output_poster_preflights_duplicate_review_before_summary_comment() -> None:
+    existing = ReviewResult(
+        id=77,
+        html_url="https://github.com/octocat/hello-world/pull/7#pullrequestreview-77",
+        state="COMMENTED",
+        body="review body\n\nCorrelation ID: `corr-existing`",
+        commit_id="abc123",
+    )
+    runtime = RecordingRuntime(existing_reviews=(existing,))
+    poster = ToolRuntimePROutputPoster(runtime)
+    comment_payload = PRCommentPayload(repo_full_name="octocat/hello-world", pr_number=7, body="summary body")
+    review_payload = PRReviewPayload(
+        repo_full_name="octocat/hello-world",
+        pr_number=7,
+        head_sha="abc123",
+        body="review body",
+    )
+
+    result = poster.post_outputs(comment_payload, review_payload=review_payload, correlation_id="corr-existing")
+
+    assert result.review == existing
+    assert [call.name for call in runtime.calls] == [
+        "github.pr.view",
+        "github.pr.review.list",
+        "github.pr.comment.create_or_update",
+    ]
+
+
+def test_pass_validation_evidence_stays_in_review_body_without_inline_comment() -> None:
+    payload = PRReviewPayload(
+        repo_full_name="octocat/hello-world",
+        pr_number=7,
+        head_sha="abc123",
+        body="review body",
+        comments=(PRReviewComment(path="src/app.py", body="Runtime validation passed for `GET /health`: ok", line=12),),
+    )
+
+    prepared = payload.prepared_for_submission()
+
+    assert prepared.comments == ()
+    assert "Runtime validation passed" in prepared.body
+    assert "Unmapped inline findings" in prepared.body

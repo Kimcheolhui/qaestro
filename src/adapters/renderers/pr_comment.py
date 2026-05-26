@@ -79,9 +79,13 @@ class PRReviewPayload:
 
     def prepared_for_submission(self) -> PRReviewPayload:
         mapped = tuple(
-            _validated_review_comment(comment).with_attribution() for comment in self.comments if comment.is_mapped
+            _validated_review_comment(comment).with_attribution()
+            for comment in self.comments
+            if comment.is_mapped and not _is_general_validation_evidence(comment)
         )
-        unmapped = tuple(comment for comment in self.comments if not comment.is_mapped)
+        unmapped = tuple(
+            comment for comment in self.comments if not comment.is_mapped or _is_general_validation_evidence(comment)
+        )
         body = self.body
         if unmapped:
             body = _append_unmapped_findings(body, unmapped)
@@ -168,6 +172,11 @@ def _validated_review_comment(comment: PRReviewComment) -> PRReviewComment:
         if comment.start_side and comment.start_side != "RIGHT":
             raise ValueError("review comment start_side must be RIGHT for qaestro output")
     return comment
+
+
+def _is_general_validation_evidence(comment: PRReviewComment) -> bool:
+    body = comment.body.strip().lower()
+    return body.startswith("runtime validation passed") or body.startswith("runtime validation skipped")
 
 
 def _review_comment_from_raw(raw: object) -> PRReviewComment:

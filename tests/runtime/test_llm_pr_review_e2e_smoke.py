@@ -182,7 +182,7 @@ def test_llm_pr_review_e2e_smoke_runs_live_provider_workflow_and_posts_outputs()
     assert result.comment_url
     assert result.review_url
     assert result.head_sha == "head123"
-    assert result.inline_comment_submitted is True
+    assert result.inline_comment_submitted is False
     assert len(live_client.requests) == 1
     prompt = str(live_client.requests[0]["prompt"])
     assert "PR description" in prompt
