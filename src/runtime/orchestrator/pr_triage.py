@@ -68,6 +68,8 @@ class RuleBasedPRWorkflowTriageClassifier:
 
     def classify(self, context: PRAnalysisContext) -> PRWorkflowTriage:
         del context
+        # Transitional default: until Agent-backed triage is authoritative,
+        # keep the full NORMAL path instead of faking LIGHTWEIGHT/DEEP choices.
         return PRWorkflowTriage(
             depth=PRWorkflowDepth.NORMAL,
             rationale="Conservative default PR workflow depth; run behaviour analysis and strategy planning.",

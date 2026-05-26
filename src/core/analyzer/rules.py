@@ -20,6 +20,8 @@ class RuleBasedPRBehaviourAnalyzer:
 
     def analyze(self, context: PRAnalysisContext) -> BehaviourImpact:
         areas = tuple(_build_impact_areas(context.files))
+        # Transitional value: Agent/LLM-backed evaluation should replace this
+        # with real PR risk once semantic risk judgment is implemented.
         overall_risk = RiskLevel.NOT_ASSESSED
         stats = _diff_stats(context.files)
         return BehaviourImpact(
@@ -43,6 +45,8 @@ def _build_impact_areas(files: tuple[PRFileDiff, ...]) -> list[ImpactArea]:
             ImpactArea(
                 module=path_group,
                 description=_area_description(path_group, group_files),
+                # Transitional value: observed path groups are not per-area
+                # risk decisions until Agent/LLM-backed evaluation replaces it.
                 risk_level=RiskLevel.NOT_ASSESSED,
                 affected_files=tuple(file.path for file in group_files),
             )

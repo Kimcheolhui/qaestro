@@ -285,6 +285,8 @@ def _triage_only_report(event: PREvent, context: PRAnalysisContext, triage: PRWo
     impact = BehaviourImpact(
         summary=triage.rationale,
         areas=(),
+        # Transitional value: triage-only output skipped analysis, so later
+        # Agent/LLM-backed evaluation must supply any real risk judgment.
         overall_risk=RiskLevel.NOT_ASSESSED,
         raw_diff_stats={
             "files_changed": len(context.files),
