@@ -20,7 +20,7 @@ def test_pr_file_diff_normalizes_status_and_documents_path_semantics() -> None:
     assert file.status is PRFileStatus.RENAMED
 
 
-def test_analyzer_groups_files_by_observed_path_groups_and_aggregates_risk() -> None:
+def test_analyzer_groups_files_by_observed_path_groups_without_risk_judgment() -> None:
     context = PRAnalysisContext(
         repo_full_name="acme-corp/web-api",
         pr_number=123,
@@ -56,7 +56,7 @@ def test_analyzer_groups_files_by_observed_path_groups_and_aggregates_risk() -> 
 
     impact = RuleBasedPRBehaviourAnalyzer().analyze(context)
 
-    assert impact.overall_risk is RiskLevel.MEDIUM
+    assert impact.overall_risk is RiskLevel.NOT_ASSESSED
     assert impact.raw_diff_stats == {
         "files_changed": 3,
         "additions": 75,
@@ -74,9 +74,9 @@ def test_analyzer_groups_files_by_observed_path_groups_and_aggregates_risk() -> 
     assert "src/api/payments.py" in impact.summary
     assert "3 files" in impact.summary
     assert [(area.module, area.risk_level) for area in impact.areas] == [
-        ("README.md", RiskLevel.LOW),
-        ("src/api", RiskLevel.MEDIUM),
-        ("tests/api", RiskLevel.LOW),
+        ("README.md", RiskLevel.NOT_ASSESSED),
+        ("src/api", RiskLevel.NOT_ASSESSED),
+        ("tests/api", RiskLevel.NOT_ASSESSED),
     ]
 
 
@@ -171,18 +171,18 @@ def test_analyzer_uses_actual_repo_path_groups_instead_of_fixed_module_labels() 
     assert [(area.module, area.risk_level, area.affected_files) for area in impact.areas] == [
         (
             "src/adapters/connectors/github",
-            RiskLevel.MEDIUM,
+            RiskLevel.NOT_ASSESSED,
             ("src/adapters/connectors/github/client.py",),
         ),
         (
             "src/runtime/orchestrator",
-            RiskLevel.LOW,
+            RiskLevel.NOT_ASSESSED,
             ("src/runtime/orchestrator/pr_workflow.py",),
         ),
     ]
 
 
-def test_analyzer_escalates_high_risk_from_diff_signals_and_change_size_not_module_names() -> None:
+def test_analyzer_preserves_diff_signals_as_raw_stats_not_risk_judgment() -> None:
     context = PRAnalysisContext(
         repo_full_name="acme-corp/web-api",
         pr_number=124,
@@ -218,8 +218,12 @@ def test_analyzer_escalates_high_risk_from_diff_signals_and_change_size_not_modu
 
     impact = RuleBasedPRBehaviourAnalyzer().analyze(context)
 
-    assert impact.overall_risk is RiskLevel.HIGH
-    risks_by_group = {area.module: area.risk_level for area in impact.areas}
-    assert risks_by_group[".github/workflows"] is RiskLevel.HIGH
-    assert risks_by_group["infra/terraform"] is RiskLevel.HIGH
-    assert risks_by_group["config"] is RiskLevel.MEDIUM
+    assert impact.overall_risk is RiskLevel.NOT_ASSESSED
+    assert impact.raw_diff_stats["additions"] == 295
+    assert impact.raw_diff_stats["deletions"] == 70
+    assert impact.raw_diff_stats["files_changed"] == 3
+    assert {area.module: area.risk_level for area in impact.areas} == {
+        ".github/workflows": RiskLevel.NOT_ASSESSED,
+        "config": RiskLevel.NOT_ASSESSED,
+        "infra/terraform": RiskLevel.NOT_ASSESSED,
+    }

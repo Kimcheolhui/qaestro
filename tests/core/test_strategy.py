@@ -13,7 +13,7 @@ from src.core.contracts import (
     RiskLevel,
 )
 from src.core.knowledge import InMemoryKnowledgeBase, KnowledgeEntry, KnowledgeQuery
-from src.core.strategy import RuleBasedPRStrategyEngine
+from src.core.strategy import EvidenceBackedPRStrategyEngine
 
 
 def test_in_memory_knowledge_base_matches_repo_and_query_text_deterministically() -> None:
@@ -44,24 +44,24 @@ def test_in_memory_knowledge_base_matches_repo_and_query_text_deterministically(
     assert tuple(entry.key for entry in matches) == ("payments-refund-contract",)
 
 
-def test_strategy_generates_deterministic_actions_from_risk_areas_and_knowledge() -> None:
+def test_strategy_keeps_path_and_knowledge_signals_as_context_not_actions() -> None:
     impact = BehaviourImpact(
         summary="Changed payment API and checkout UI",
         areas=(
             ImpactArea(
                 module="src/api",
                 description="modified src/api/payments.py",
-                risk_level=RiskLevel.MEDIUM,
+                risk_level=RiskLevel.NOT_ASSESSED,
                 affected_files=("src/api/payments.py",),
             ),
             ImpactArea(
                 module="src/web/checkout",
                 description="modified src/web/checkout/RefundForm.tsx",
-                risk_level=RiskLevel.MEDIUM,
+                risk_level=RiskLevel.NOT_ASSESSED,
                 affected_files=("src/web/checkout/RefundForm.tsx",),
             ),
         ),
-        overall_risk=RiskLevel.MEDIUM,
+        overall_risk=RiskLevel.NOT_ASSESSED,
         raw_diff_stats={"files_changed": 2, "additions": 50, "deletions": 10},
     )
     knowledge = InMemoryKnowledgeBase(
@@ -75,74 +75,67 @@ def test_strategy_generates_deterministic_actions_from_risk_areas_and_knowledge(
         )
     )
 
-    result = RuleBasedPRStrategyEngine(knowledge=knowledge).plan(
+    result = EvidenceBackedPRStrategyEngine(knowledge=knowledge).plan(
         repo_full_name="acme-corp/web-api",
         pr_number=123,
         title="feat: add refund flow",
         impact=impact,
     )
 
-    assert result.confidence == 0.78
+    assert result.confidence == 0.0
     assert result.knowledge_refs == ("refund-regression",)
-    assert result.reasoning.startswith("Medium risk")
-    assert [(action.action_type, action.target) for action in result.actions] == [
-        (ActionType.RUN_TESTS, "tests/src/api"),
-        (ActionType.RUN_TESTS, "tests/src/web/checkout"),
-        (ActionType.RUN_TESTS, "tests/"),
-        (ActionType.CUSTOM, "knowledge:refund-regression"),
-    ]
-    assert [action.priority for action in result.actions] == [2, 2, 2, 4]
-    assert "zero-amount" in result.actions[-1].description
+    assert result.reasoning.startswith("Uncalibrated strategy context")
+    assert "Observed path groups: src/api, src/web/checkout" in result.reasoning
+    assert "Knowledge refs: refund-regression" in result.reasoning
+    assert result.actions == ()
 
 
-def test_strategy_generates_generic_actions_for_repo_observed_groups() -> None:
+def test_strategy_does_not_invent_path_derived_test_targets_for_repo_observed_groups() -> None:
     impact = BehaviourImpact(
         summary="Changed adapter module",
         areas=(
             ImpactArea(
                 module="src/adapters/connectors/github",
                 description="modified src/adapters/connectors/github/client.py",
-                risk_level=RiskLevel.LOW,
+                risk_level=RiskLevel.NOT_ASSESSED,
                 affected_files=("src/adapters/connectors/github/client.py",),
             ),
         ),
-        overall_risk=RiskLevel.LOW,
+        overall_risk=RiskLevel.NOT_ASSESSED,
     )
 
-    result = RuleBasedPRStrategyEngine().plan(
+    result = EvidenceBackedPRStrategyEngine().plan(
         repo_full_name="Kimcheolhui/qaestro",
         pr_number=39,
         title="feat: update connector",
         impact=impact,
     )
 
-    assert result.actions
-    assert result.actions[0].action_type is ActionType.RUN_TESTS
-    assert result.actions[0].target == "tests/src/adapters/connectors/github"
-    assert result.actions[1].target == "tests/"
+    assert result.actions == ()
+    assert "src/adapters/connectors/github" in result.reasoning
 
 
-def test_strategy_skips_low_signal_doc_groups_for_step3_test_actions() -> None:
+def test_strategy_does_not_need_low_signal_doc_rules_to_avoid_test_actions() -> None:
     impact = BehaviourImpact(
         summary="Changed documentation only",
         areas=(
             ImpactArea(
                 module="docs",
                 description="modified docs/ARCHITECTURE.md",
-                risk_level=RiskLevel.LOW,
+                risk_level=RiskLevel.NOT_ASSESSED,
                 affected_files=("docs/ARCHITECTURE.md",),
             ),
             ImpactArea(
                 module="CHANGELOG.md",
                 description="modified CHANGELOG.md",
-                risk_level=RiskLevel.LOW,
+                risk_level=RiskLevel.NOT_ASSESSED,
                 affected_files=("CHANGELOG.md",),
             ),
         ),
-        overall_risk=RiskLevel.LOW,
+        overall_risk=RiskLevel.NOT_ASSESSED,
     )
 
-    result = RuleBasedPRStrategyEngine().plan(
+    result = EvidenceBackedPRStrategyEngine().plan(
         repo_full_name="Kimcheolhui/qaestro",
         pr_number=40,
         title="docs: update architecture notes",
@@ -159,11 +152,11 @@ def test_strategy_includes_current_head_ci_failure_without_mixing_stale_history(
             ImpactArea(
                 module="src/api",
                 description="modified src/api/payments.py",
-                risk_level=RiskLevel.MEDIUM,
+                risk_level=RiskLevel.NOT_ASSESSED,
                 affected_files=("src/api/payments.py",),
             ),
         ),
-        overall_risk=RiskLevel.MEDIUM,
+        overall_risk=RiskLevel.NOT_ASSESSED,
     )
     ci_feedback = CIFeedbackContext(
         current_head_sha="sha-current",
@@ -193,7 +186,7 @@ def test_strategy_includes_current_head_ci_failure_without_mixing_stale_history(
         ),
     )
 
-    result = RuleBasedPRStrategyEngine().plan(
+    result = EvidenceBackedPRStrategyEngine().plan(
         repo_full_name="acme-corp/web-api",
         pr_number=123,
         title="feat: update payment API",
@@ -203,9 +196,9 @@ def test_strategy_includes_current_head_ci_failure_without_mixing_stale_history(
 
     ci_actions = [action for action in result.actions if action.target.startswith("ci:")]
     assert [(action.action_type, action.target, action.priority) for action in ci_actions] == [
-        (ActionType.RUN_TESTS, "ci:Tests", 4),
-        (ActionType.RUN_TESTS, "ci:Tests/pytest", 5),
-        (ActionType.TYPE_CHECK, "ci:Tests/mypy", 5),
+        (ActionType.CUSTOM, "ci:Tests", 4),
+        (ActionType.CUSTOM, "ci:Tests/pytest", 5),
+        (ActionType.CUSTOM, "ci:Tests/mypy", 5),
     ]
     assert "current-head CI/check feedback: Tests=failure" in result.reasoning
     assert "failed jobs: pytest, mypy" in result.reasoning
@@ -214,7 +207,7 @@ def test_strategy_includes_current_head_ci_failure_without_mixing_stale_history(
 
 
 def test_strategy_represents_success_cancelled_timed_out_and_pending_ci_feedback() -> None:
-    impact = BehaviourImpact(summary="Changed runtime worker", areas=(), overall_risk=RiskLevel.LOW)
+    impact = BehaviourImpact(summary="Changed runtime worker", areas=(), overall_risk=RiskLevel.NOT_ASSESSED)
     ci_feedback = CIFeedbackContext(
         current_head_sha="sha-current",
         readiness=CIReadinessState.WAITING_FOR_CHECKS,
@@ -242,7 +235,7 @@ def test_strategy_represents_success_cancelled_timed_out_and_pending_ci_feedback
         pending_checks=("Security",),
     )
 
-    result = RuleBasedPRStrategyEngine().plan(
+    result = EvidenceBackedPRStrategyEngine().plan(
         repo_full_name="acme-corp/web-api",
         pr_number=124,
         title="feat: update worker",
@@ -256,3 +249,36 @@ def test_strategy_represents_success_cancelled_timed_out_and_pending_ci_feedback
     assert "pending checks: Security" in result.reasoning
     assert any(action.target == "ci:E2E/browser" and action.priority == 5 for action in result.actions)
     assert any(action.target == "ci:Deploy" and action.priority == 3 for action in result.actions)
+
+
+def test_strategy_does_not_map_ci_job_names_to_validation_action_types() -> None:
+    impact = BehaviourImpact(summary="Changed runtime worker", areas=(), overall_risk=RiskLevel.NOT_ASSESSED)
+    ci_feedback = CIFeedbackContext(
+        current_head_sha="sha-current",
+        readiness=CIReadinessState.CHECKS_FAILED,
+        current_observations=(
+            CIObservation(
+                workflow_name="CI",
+                conclusion="failure",
+                run_url="https://github.com/acme/web/actions/runs/5",
+                failed_jobs=("mypy", "eslint", "secret scan"),
+                commit_sha="sha-current",
+            ),
+        ),
+    )
+
+    result = EvidenceBackedPRStrategyEngine().plan(
+        repo_full_name="acme-corp/web-api",
+        pr_number=125,
+        title="fix: update worker",
+        impact=impact,
+        ci_feedback=ci_feedback,
+    )
+
+    assert [action.action_type for action in result.actions] == [ActionType.CUSTOM] * 4
+    assert [action.target for action in result.actions] == [
+        "ci:CI",
+        "ci:CI/mypy",
+        "ci:CI/eslint",
+        "ci:CI/secret scan",
+    ]

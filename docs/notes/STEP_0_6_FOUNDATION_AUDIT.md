@@ -83,8 +83,8 @@ MVP stub / 의도된 제한:
 
 근거:
 
-- `src/core/analyzer/*`가 diff/file metadata 기반 impact와 risk를 산출한다.
-- `src/core/strategy/*`가 deterministic strategy/checklist/action을 산출한다.
+- `src/core/analyzer/*`가 diff/file metadata 기반 impact facts와 path group을 산출하되 risk는 `NOT_ASSESSED`로 남긴다.
+- `src/core/strategy/*`가 path/knowledge token match를 product-facing action으로 만들지 않고 context로만 노출하며, current-head CI evidence만 action 우선순위에 반영한다.
 - `src/core/knowledge/memory.py`가 strategy에서 사용할 knowledge port와 in-memory mock을 제공한다.
 - `src/adapters/renderers/pr_comment.py`가 Behaviour Impact Report를 managed PR comment 형태로 렌더링한다.
 - `tests/core/test_analyzer.py`, `tests/core/test_strategy.py`, `tests/adapters/renderers/test_pr_comment.py`, `tests/runtime/test_orchestrator.py`가 vertical slice를 검증한다.
@@ -92,7 +92,7 @@ MVP stub / 의도된 제한:
 후속 deferred:
 
 - 실제 backing Knowledge Store adapter는 Step 8 범위다.
-- strategy 품질은 MVP first pass로 충분하지만, docs-only/config-only/test-only 등 low-signal 변경 noise는 #91에서 Step 6.5 hardening으로 다룬다.
+- strategy 품질은 MVP first pass에서 Step 6.5-A(#91)로 정리했다. 남은 전략 고도화는 path/test-target heuristic 복구가 아니라 Agent Runtime-backed strategy planning과 Step 8 Knowledge Store evidence 품질 개선으로 다룬다.
 
 ### Step 3.5 — Tool Runtime boundary
 

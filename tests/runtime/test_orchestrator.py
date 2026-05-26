@@ -362,8 +362,10 @@ def test_pr_workflow_orchestrator_runs_stub_flow_and_renders_pr_comment_payload(
         WorkflowStage.RENDERER,
     )
     assert result.impact.summary.startswith("PR #31 (feat: add connector) changes 2 files")
-    assert result.strategy.reasoning.startswith("High risk")
-    assert len(result.validations) == 3
+    assert result.impact.overall_risk is RiskLevel.NOT_ASSESSED
+    assert result.strategy.reasoning.startswith("Uncalibrated strategy context")
+    assert result.strategy.actions == ()
+    assert result.validations == ()
     assert result.comment_payload is not None
     assert result.comment_payload.repo_full_name == "Kimcheolhui/qaestro"
     assert result.comment_payload.pr_number == 31
@@ -486,20 +488,25 @@ def test_pr_workflow_orchestrator_can_emit_lightweight_triage_output_without_ful
         files_changed=(FileChange(path="docs/CONTRIBUTING.md", status="modified", additions=3, deletions=1),),
     )
 
-    orchestrator = PRWorkflowOrchestrator()
-    result = orchestrator.run(event)
+    result = PRWorkflowOrchestrator().run(event)
 
-    assert result.triage.depth is PRWorkflowDepth.LIGHTWEIGHT
-    assert result.stage_order == (WorkflowStage.CONTEXT, WorkflowStage.TRIAGE, WorkflowStage.RENDERER)
-    assert result.impact.areas == ()
+    assert result.triage.depth is PRWorkflowDepth.NORMAL
+    assert result.stage_order == (
+        WorkflowStage.CONTEXT,
+        WorkflowStage.TRIAGE,
+        WorkflowStage.ANALYZER,
+        WorkflowStage.STRATEGY,
+        WorkflowStage.VALIDATOR,
+        WorkflowStage.RENDERER,
+    )
+    assert result.impact.areas
     assert result.strategy.actions == ()
     assert result.validations == ()
     assert result.comment_payload is not None
-    assert "Workflow depth: **LIGHTWEIGHT**" in result.comment_payload.body
+    assert "Workflow depth: **NORMAL**" in result.comment_payload.body
     assert "Overall risk: **NOT ASSESSED**" in result.comment_payload.body
-    assert "Triaged analysis/validation stages: `none`" in result.comment_payload.body
-    assert "Allowed stages after triage" not in result.comment_payload.body
-    assert "full analysis was skipped" in result.comment_payload.body
+    assert "Triaged analysis/validation stages: `analyzer, strategy, validator`" in result.comment_payload.body
+    assert "Conservative default PR workflow depth" in result.comment_payload.body
     assert "docs/CONTRIBUTING.md" in result.comment_payload.body
 
     assert result.impact.overall_risk is RiskLevel.NOT_ASSESSED
@@ -593,8 +600,10 @@ def test_rule_based_triage_deep_signal_matching_uses_token_boundaries() -> None:
     false_positive_result = PRWorkflowOrchestrator(triage_classifier=classifier).run(false_positive_event)
     deep_signal_result = PRWorkflowOrchestrator(triage_classifier=classifier).run(deep_signal_event)
 
-    assert false_positive_result.triage.depth is PRWorkflowDepth.LIGHTWEIGHT
-    assert deep_signal_result.triage.depth is PRWorkflowDepth.DEEP
+    assert false_positive_result.triage.depth is PRWorkflowDepth.NORMAL
+    assert deep_signal_result.triage.depth is PRWorkflowDepth.NORMAL
+    assert "Conservative default PR workflow depth" in false_positive_result.triage.rationale
+    assert "Conservative default PR workflow depth" in deep_signal_result.triage.rationale
 
 
 def test_agent_backed_triage_uses_runner_depth_decision_for_docs_and_config_intent() -> None:
@@ -690,9 +699,10 @@ def test_agent_backed_triage_falls_back_when_runner_response_is_invalid() -> Non
 
     result = PRWorkflowOrchestrator(triage_classifier=classifier).run(event)
 
-    assert result.triage.depth is PRWorkflowDepth.LIGHTWEIGHT
+    assert result.triage.depth is PRWorkflowDepth.NORMAL
     assert "Agent triage unavailable" in result.triage.rationale
-    assert "Small low-signal documentation" in result.triage.rationale
+    assert "Conservative default PR workflow depth" in result.triage.rationale
+    assert result.stage_order[:3] == (WorkflowStage.CONTEXT, WorkflowStage.TRIAGE, WorkflowStage.ANALYZER)
 
 
 def test_pr_workflow_orchestrator_uses_renders_output_contract_for_noop() -> None:

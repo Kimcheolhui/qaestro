@@ -9,7 +9,7 @@ from contextlib import suppress
 from dataclasses import dataclass
 from enum import StrEnum
 
-from src.core.analyzer import PRAnalysisContext, PRFileDiff, PRFileStatus
+from src.core.analyzer import PRAnalysisContext, PRFileDiff
 from src.runtime.agent import AgentRunInput, AgentRunStatus, AgentSessionHandle, AgentSessionScope
 from src.runtime.agent.types import AgentRunner
 from src.runtime.prompts import PromptId, load_prompt
@@ -58,31 +58,21 @@ class PRWorkflowTriage:
 
 
 class RuleBasedPRWorkflowTriageClassifier:
-    """Deterministic placeholder for PR intent/depth classification.
+    """Conservative deterministic fallback for PR workflow depth.
 
-    This is intentionally conservative and portable. It only chooses a
-    lightweight path for very small, low-signal documentation/metadata changes,
-    escalates obvious high-impact signals to deep, and otherwise preserves the
-    normal Step 3 analysis path. It is only a temporary seam and must be replaced
-    by Agent Framework + repo-knowledge/instruction based classification.
+    The fallback no longer treats path taxonomies, changed-line thresholds, or
+    keyword tokens as reliable PR intent/risk classification. When an agent or
+    explicit policy is unavailable, it keeps the normal analyzer/strategy path
+    instead of skipping analysis or forcing deep validation from weak signals.
     """
 
     def classify(self, context: PRAnalysisContext) -> PRWorkflowTriage:
-        if _requires_deep_workflow(context):
-            return PRWorkflowTriage(
-                depth=PRWorkflowDepth.DEEP,
-                rationale="High-impact change signals require full analysis and validation.",
-                allowed_stages=(WorkflowStage.ANALYZER, WorkflowStage.STRATEGY, WorkflowStage.VALIDATOR),
-            )
-        if _is_lightweight_change(context):
-            return PRWorkflowTriage(
-                depth=PRWorkflowDepth.LIGHTWEIGHT,
-                rationale="Small low-signal documentation or metadata change; full analysis was skipped.",
-                allowed_stages=(),
-            )
+        del context
+        # Transitional default: until Agent-backed triage is authoritative,
+        # keep the full NORMAL path instead of faking LIGHTWEIGHT/DEEP choices.
         return PRWorkflowTriage(
             depth=PRWorkflowDepth.NORMAL,
-            rationale="Default PR workflow depth; run behaviour analysis and strategy planning.",
+            rationale="Conservative default PR workflow depth; run behaviour analysis and strategy planning.",
             allowed_stages=(WorkflowStage.ANALYZER, WorkflowStage.STRATEGY, WorkflowStage.VALIDATOR),
         )
 
@@ -250,66 +240,3 @@ def _safe_error(exc: Exception) -> str:
 
 def _safe_session_part(value: str) -> str:
     return re.sub(r"[^a-zA-Z0-9_.-]+", "-", value).strip("-") or "repo"
-
-
-_LOW_SIGNAL_ROOT_FILES = {"readme.md", "changelog.md", "license", "notice"}
-_LOW_SIGNAL_DIRS = {"docs"}
-_DEEP_SIGNAL_TOKENS = (
-    "api",
-    "auth",
-    "authorization",
-    "breaking",
-    "deploy",
-    "deployment",
-    "migration",
-    "permission",
-    "runbook",
-    "secret",
-    "security",
-)
-_GENERATED_PATH_PARTS = {"generated", "dist", "build"}
-
-
-def _is_lightweight_change(context: PRAnalysisContext) -> bool:
-    """Return true for tiny low-signal changes safe for summary-only output."""
-    if not context.files:
-        return False
-    changed_lines = sum(file.additions + file.deletions for file in context.files)
-    if changed_lines > 30 or len(context.files) > 5:
-        return False
-    return all(_is_low_signal_file(file.path) for file in context.files) and not _contains_deep_signal(context)
-
-
-def _requires_deep_workflow(context: PRAnalysisContext) -> bool:
-    """Escalate obvious semantic or risky signals without path taxonomies."""
-    if any(file.status is PRFileStatus.REMOVED for file in context.files):
-        return True
-    changed_lines = sum(file.additions + file.deletions for file in context.files)
-    if changed_lines >= 250:
-        return True
-    return _contains_deep_signal(context)
-
-
-def _contains_deep_signal(context: PRAnalysisContext) -> bool:
-    haystacks = [context.title, context.body, context.unified_diff]
-    haystacks.extend(file.path for file in context.files)
-    haystacks.extend(file.patch or "" for file in context.files)
-    # Temporary seam hygiene only: match whole path/text tokens so short signals
-    # like "api" and "auth" do not fire on unrelated words such as "capital"
-    # or "author". This is not a permanent programmatic PR-depth classifier.
-    observed_tokens = set(re.split(r"[^a-z0-9]+", "\n".join(haystacks).lower()))
-    return any(token in observed_tokens for token in _DEEP_SIGNAL_TOKENS)
-
-
-def _is_low_signal_file(path: str) -> bool:
-    normalized = path.strip("/").lower()
-    if not normalized:
-        return True
-    parts = tuple(part for part in normalized.split("/") if part)
-    if not parts:
-        return True
-    if any(part in _GENERATED_PATH_PARTS for part in parts):
-        return True
-    if len(parts) == 1:
-        return parts[0] in _LOW_SIGNAL_ROOT_FILES or parts[0].endswith((".md", ".rst", ".txt"))
-    return parts[0] in _LOW_SIGNAL_DIRS

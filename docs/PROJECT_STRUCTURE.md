@@ -160,17 +160,17 @@ qaestro는 자유롭게 모든 것을 실행하는 agent가 아니라, 정해진
 
 이 관점은 그룹 구조에도 반영된다.
 
-- `core/strategy`: 규칙과 맥락 안에서 검증 전략을 선택하는 계층
+- `core/strategy`: 관측된 evidence와 agent/repo knowledge 안에서 검증 전략을 선택하는 계층
 - `core/knowledge`: Agent가 참고하는 고객별 QA 지식 자산 접근 경계
 - `runtime/validator`: 허용된 probe만 실행하는 계층
-- `runtime/orchestrator`: confidence와 action type에 따라 제안, 검증, 승인 대기 흐름을 통제하는 계층
+- `runtime/orchestrator`: triage 결과, validation policy, action type에 따라 제안, 검증, 승인 대기 흐름을 통제하는 계층
 - `adapters/*`: 외부 세계와 포맷을 연결하지만 core policy를 소유하지 않는 계층
 
-예를 들면 다음과 같은 정책이 가능하다.
+confidence 값이 존재하더라도 hand-picked numeric heuristic을 자동 실행 정책의 근거로 사용하지 않는다. 검증 실행 여부는 현재 head CI/check evidence, 명시적 triage 결과, validation policy, 사용자/운영 승인 경계에 의해 결정되어야 한다. 예를 들면 다음과 같은 정책이 가능하다.
 
-- 낮은 confidence: 전략 제안만 수행
-- 중간 confidence: 런타임 검증까지 수행
-- 높은 confidence: CI 반영 후보까지 제안하되 자동 반영은 승인 후 수행
+- Agent/repo knowledge가 특정 runtime probe 필요성을 설명하고 policy가 허용하면 런타임 검증까지 수행
+- current-head CI failure나 failed job처럼 관측된 evidence는 validation 우선순위에 반영
+- agent triage가 실패하거나 malformed response를 내면 path/token rule로 lightweight/deep을 찍지 않고 normal workflow로 보수적 fallback
 - destructive action: 수행하지 않음
 
 즉, 이 구조는 단순 기능 분리가 아니라 판단, 규칙, 실행, 통제를 서로 분리해 QA Agent의 자율성을 안전하게 제한하기 위한 구조다.
