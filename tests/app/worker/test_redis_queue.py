@@ -28,6 +28,8 @@ class FakeRedis:
         self.claimed_messages: list[tuple[bytes, dict[bytes, bytes]]] = []
         self.acked: list[tuple[str, str, str]] = []
         self.claim_start_ids: list[str] = []
+        self.expected_read_block_ms = 0
+        self.expected_claim_idle_ms = 5000
         self.xgroup_create_error: Exception | None = None
 
     def xgroup_create(self, stream: str, group: str, id: str, mkstream: bool) -> None:
@@ -52,7 +54,7 @@ class FakeRedis:
         assert consumername == "worker-1"
         assert streams == {"qaestro:jobs": ">"}
         assert count == 1
-        assert block == 0
+        assert block == self.expected_read_block_ms
         if not self.new_messages:
             return []
         return [(b"qaestro:jobs", [self.new_messages.pop(0)])]
@@ -69,7 +71,7 @@ class FakeRedis:
         assert name == "qaestro:jobs"
         assert groupname == "qaestro-workers"
         assert consumername == "worker-1"
-        assert min_idle_time == 5000
+        assert min_idle_time == self.expected_claim_idle_ms
         assert count == 1
         self.claim_start_ids.append(start_id)
         if not self.claimed_messages:
@@ -168,16 +170,54 @@ def _stored_job_payload(redis: FakeRedis) -> dict[bytes, bytes]:
     return {b"job": fields["job"].encode("utf-8")}
 
 
-def _queue(redis: FakeRedis, *, busy_group_error: type[Exception] = Exception) -> RedisStreamsJobQueue:
+def _queue(
+    redis: FakeRedis,
+    *,
+    read_block_ms: int = 0,
+    claim_idle_ms: int = 5000,
+    busy_group_error: type[Exception] = Exception,
+) -> RedisStreamsJobQueue:
+    redis.expected_read_block_ms = read_block_ms
+    redis.expected_claim_idle_ms = claim_idle_ms
     return RedisStreamsJobQueue(
         redis_client=redis,  # type: ignore[arg-type]
         stream="qaestro:jobs",
         group="qaestro-workers",
         consumer="worker-1",
-        read_block_ms=0,
-        claim_idle_ms=5000,
+        read_block_ms=read_block_ms,
+        claim_idle_ms=claim_idle_ms,
         busy_group_error=busy_group_error,
     )
+
+
+def test_redis_streams_queue_rejects_negative_timing_values() -> None:
+    redis = FakeRedis()
+
+    try:
+        _queue(redis, read_block_ms=-1)
+    except ValueError as exc:
+        assert "read_block_ms" in str(exc)
+    else:  # pragma: no cover - assertion clarity
+        raise AssertionError("negative read_block_ms was accepted")
+
+    try:
+        _queue(redis, claim_idle_ms=-1)
+    except ValueError as exc:
+        assert "claim_idle_ms" in str(exc)
+    else:  # pragma: no cover - assertion clarity
+        raise AssertionError("negative claim_idle_ms was accepted")
+
+
+def test_redis_streams_queue_rejects_claim_idle_shorter_than_read_block() -> None:
+    redis = FakeRedis()
+
+    try:
+        _queue(redis, read_block_ms=6000, claim_idle_ms=5000)
+    except ValueError as exc:
+        assert "claim_idle_ms" in str(exc)
+        assert "read_block_ms" in str(exc)
+    else:  # pragma: no cover - assertion clarity
+        raise AssertionError("unsafe claim_idle_ms/read_block_ms combination was accepted")
 
 
 def test_redis_streams_queue_ignores_existing_consumer_group_error() -> None:
@@ -296,6 +336,15 @@ def test_redis_streams_queue_acks_delivered_messages() -> None:
     queue.ack(EventJob(event=_pr_opened(), correlation_id="corr-pr_opened", delivery_id="1700000000000-0"))
 
     assert redis.acked == [("qaestro:jobs", "qaestro-workers", "1700000000000-0")]
+
+
+def test_redis_streams_queue_ack_malformed_jobs_by_delivery_id() -> None:
+    redis = FakeRedis()
+    queue = _queue(redis)
+
+    queue.ack(MalformedEventJob(delivery_id="1700000000007-0", error="bad payload"))
+
+    assert redis.acked == [("qaestro:jobs", "qaestro-workers", "1700000000007-0")]
 
 
 def test_redis_streams_queue_ignores_ack_without_delivery_id() -> None:

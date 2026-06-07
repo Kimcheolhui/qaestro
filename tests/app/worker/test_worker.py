@@ -288,6 +288,81 @@ def test_worker_acks_failed_queue_jobs_after_retries_are_exhausted() -> None:
     assert queue.acked == [job]
 
 
+def test_worker_run_until_empty_logs_terminal_failure_before_ack(caplog: pytest.LogCaptureFixture) -> None:
+    event = _event()
+    job = EventJob(event=event, correlation_id="failed-drain", delivery_id="1700000000007-0")
+
+    class FailingOrchestrator:
+        def run(self, event: Event) -> PRWorkflowResult:
+            raise RuntimeError("terminal drain failure")
+
+    class AckRecordingQueue(InMemoryJobQueue):
+        def __init__(self) -> None:
+            super().__init__([job])
+            self.acked: list[EventJob] = []
+
+        def ack(self, job: EventJob | MalformedEventJob) -> None:
+            assert isinstance(job, EventJob)
+            assert len(caplog.records) == 1
+            self.acked.append(job)
+
+    queue = AckRecordingQueue()
+    worker = Worker(orchestrator=FailingOrchestrator(), max_attempts=1)
+
+    with caplog.at_level(logging.ERROR, logger="qaestro.src.app.worker.runner"):
+        executions = worker.run_until_empty(queue)
+
+    assert executions[0].status == WorkerStatus.FAILED
+    assert queue.acked == [job]
+    record = cast(Any, caplog.records[0])
+    assert record.message == "worker job failed"
+    assert record.correlation_id == "failed-drain"
+    assert record.delivery_id == "1700000000007-0"
+    assert record.attempts == 1
+    assert record.error == "terminal drain failure"
+
+
+def test_worker_run_until_empty_retries_output_failures_before_ack() -> None:
+    event = _event()
+    job = EventJob(event=event, correlation_id="output-failed", delivery_id="1700000000008-0")
+    workflow_result = _result(event)
+
+    class FailingPoster:
+        def __init__(self) -> None:
+            self.events: list[str] = []
+
+        def post_comment(self, payload: PRCommentPayload, *, correlation_id: str) -> object:
+            self.events.append(f"post:{correlation_id}:{payload.pr_number}")
+            raise RuntimeError("post failed")
+
+    class AckRecordingQueue(InMemoryJobQueue):
+        def __init__(self, poster: FailingPoster) -> None:
+            super().__init__([job])
+            self._poster = poster
+            self.acked: list[EventJob] = []
+
+        def ack(self, job: EventJob | MalformedEventJob) -> None:
+            assert isinstance(job, EventJob)
+            self._poster.events.append("ack")
+            self.acked.append(job)
+
+    poster = FailingPoster()
+    queue = AckRecordingQueue(poster)
+    worker = Worker(
+        orchestrator=RecordingOrchestrator(workflow_result),
+        output_poster=poster,
+        max_attempts=2,
+    )
+
+    executions = worker.run_until_empty(queue)
+
+    assert executions[0].status == WorkerStatus.FAILED
+    assert executions[0].attempts == 2
+    assert executions[0].error == "post failed"
+    assert queue.acked == [job]
+    assert poster.events == ["post:output-failed:32", "post:output-failed:32", "ack"]
+
+
 def test_worker_run_forever_sleeps_when_queue_is_empty(monkeypatch: pytest.MonkeyPatch) -> None:
     class EmptyThenStopQueue:
         def __init__(self) -> None:
