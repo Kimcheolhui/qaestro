@@ -19,6 +19,7 @@ from src.core.contracts.domain import (
     RiskLevel,
     StrategyAction,
     StrategyResult,
+    ValidationLocation,
     ValidationOutcome,
     ValidationResult,
 )
@@ -532,6 +533,13 @@ class TestValidationResult:
         assert vr.details == ""
         assert vr.duration_seconds == 0.0
         assert vr.artifacts == ()
+        assert vr.locations == ()
+
+    def test_can_carry_explicit_review_location(self):
+        action = StrategyAction(action_type=ActionType.VERIFY_API_CONTRACT, description="d", target="GET /health")
+        location = ValidationLocation(path="src/app.py", line=12, start_line=10)
+        vr = ValidationResult(action=action, outcome=ValidationOutcome.FAIL, locations=(location,))
+        assert vr.locations == (location,)
 
 
 class TestQAReport:

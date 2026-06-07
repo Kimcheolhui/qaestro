@@ -27,6 +27,7 @@ from src.core.contracts import (
     RiskLevel,
     StrategyAction,
     StrategyResult,
+    ValidationLocation,
     ValidationOutcome,
     ValidationResult,
 )
@@ -130,6 +131,67 @@ def _pr_reviewed_event() -> PRReviewed:
     )
 
 
+def _review_output_event(*, pr_number: int = 101, head_sha: str = "review-head-sha") -> PROpened:
+    return PROpened(
+        meta=_event_meta("evt-review-output", EventType.PR_OPENED, "corr-review-output"),
+        repo_full_name="owner/repo",
+        pr_number=pr_number,
+        title="feat: add validation",
+        body="",
+        author="review-author",
+        base_branch="main",
+        head_branch="feat/review-output",
+        diff_url=f"https://example.test/owner/repo/pull/{pr_number}.diff",
+        files_changed=(FileChange(path="src/app.py", status="modified", additions=8),),
+        head_sha=head_sha,
+    )
+
+
+def _validation_action(target: str = "GET /health") -> StrategyAction:
+    return StrategyAction(
+        action_type=ActionType.VERIFY_API_CONTRACT,
+        description="verify api",
+        target=target,
+        priority=5,
+        rationale="exercise validation review output",
+    )
+
+
+class StaticStrategyEngine:
+    def __init__(self, actions: tuple[StrategyAction, ...]) -> None:
+        self._actions = actions
+
+    def plan(
+        self,
+        *,
+        repo_full_name: str,
+        pr_number: int,
+        title: str,
+        impact: BehaviourImpact,
+        ci_feedback: CIFeedbackContext | None = None,
+    ) -> StrategyResult:
+        del repo_full_name, pr_number, title, impact, ci_feedback
+        return StrategyResult(actions=self._actions, reasoning="verify API contract", confidence=1.0)
+
+
+class StaticValidator:
+    def __init__(self, validations: tuple[ValidationResult, ...]) -> None:
+        self._validations = validations
+
+    def validate(self, strategy: StrategyResult) -> tuple[ValidationResult, ...]:
+        assert strategy.actions == tuple(validation.action for validation in self._validations)
+        return self._validations
+
+
+def _review_payload_for_validations(*validations: ValidationResult) -> PRReviewPayload:
+    result = PRWorkflowOrchestrator(
+        strategy_engine=StaticStrategyEngine(tuple(validation.action for validation in validations)),
+        validator=StaticValidator(tuple(validations)),
+    ).run(_review_output_event())
+    assert isinstance(result.review_payload, PRReviewPayload)
+    return result.review_payload
+
+
 def test_event_orchestrator_dispatches_pr_events_to_pr_sub_orchestrator():
     event = _pr_opened_event()
     orchestrator = EventOrchestrator()
@@ -152,63 +214,66 @@ def test_event_orchestrator_dispatches_pr_events_to_pr_sub_orchestrator():
     assert result.comment_payload.pr_number == 31
 
 
-def test_pr_workflow_orchestrator_produces_official_review_payload_for_output_stage() -> None:
-    event = PROpened(
-        meta=_event_meta("evt-review-output", EventType.PR_OPENED, "corr-review-output"),
-        repo_full_name="Kimcheolhui/qaestro",
-        pr_number=31,
-        title="feat: add validation",
-        body="",
-        author="Kimcheolhui",
-        base_branch="main",
-        head_branch="feat/review-output",
-        diff_url="https://github.com/Kimcheolhui/qaestro/pull/31.diff",
-        files_changed=(FileChange(path="src/app.py", status="modified", additions=8),),
-        head_sha="abc123",
+def test_pr_workflow_orchestrator_sets_basic_official_review_payload_fields() -> None:
+    action = _validation_action()
+    review = _review_payload_for_validations(
+        ValidationResult(action=action, outcome=ValidationOutcome.PASS, details="probe passed")
     )
 
-    action = StrategyAction(
-        action_type=ActionType.VERIFY_API_CONTRACT,
-        description="verify api",
-        target="GET /health",
-        priority=5,
-        rationale="exercise inline review mapping",
+    assert review.repo_full_name == "owner/repo"
+    assert review.pr_number == 101
+    assert review.head_sha == "review-head-sha"
+    assert review.event == "COMMENT"
+    assert "Correlation ID: `corr-review-output`" in review.body
+    assert "Runtime Validation Review" in review.body
+
+
+def test_pr_workflow_orchestrator_keeps_passing_validation_evidence_out_of_inline_comments() -> None:
+    action = _validation_action()
+    review = _review_payload_for_validations(
+        ValidationResult(action=action, outcome=ValidationOutcome.PASS, details="probe passed")
     )
 
-    class PassingValidator:
-        def validate(self, strategy: StrategyResult) -> tuple[ValidationResult, ...]:
-            return (
-                ValidationResult(
-                    action=action,
-                    outcome=ValidationOutcome.PASS,
-                    details="probe passed",
-                ),
-            )
+    assert "**PASS** `GET /health`: probe passed" in review.body
+    assert review.comments == ()
 
-    class SingleActionStrategy:
-        def plan(
-            self,
-            *,
-            repo_full_name: str,
-            pr_number: int,
-            title: str,
-            impact: BehaviourImpact,
-            ci_feedback: CIFeedbackContext | None = None,
-        ) -> StrategyResult:
-            return StrategyResult(actions=(action,), reasoning="verify API contract", confidence=1.0)
 
-    result = PRWorkflowOrchestrator(strategy_engine=SingleActionStrategy(), validator=PassingValidator()).run(event)
+def test_pr_workflow_orchestrator_keeps_skipped_validation_evidence_out_of_inline_comments() -> None:
+    action = _validation_action("POST /orders")
+    review = _review_payload_for_validations(
+        ValidationResult(action=action, outcome=ValidationOutcome.SKIPPED, details="needs approval")
+    )
 
-    assert isinstance(result.review_payload, PRReviewPayload)
-    assert result.review_payload.repo_full_name == "Kimcheolhui/qaestro"
-    assert result.review_payload.pr_number == 31
-    assert result.review_payload.head_sha == "abc123"
-    assert result.review_payload.event == "COMMENT"
-    assert "Correlation ID: `corr-review-output`" in result.review_payload.body
-    assert "Runtime Validation Review" in result.review_payload.body
-    assert result.review_payload.comments
-    assert result.review_payload.comments[0].path == "src/app.py"
-    assert result.review_payload.comments[0].line is None
+    assert "**SKIPPED** `POST /orders`: needs approval" in review.body
+    assert review.comments == ()
+
+
+def test_pr_workflow_orchestrator_creates_inline_comment_for_mapped_validation_failure() -> None:
+    action = _validation_action()
+    review = _review_payload_for_validations(
+        ValidationResult(
+            action=action,
+            outcome=ValidationOutcome.FAIL,
+            details="expected 200, got 500",
+            locations=(ValidationLocation(path="src/app.py", line=12),),
+        )
+    )
+
+    assert len(review.comments) == 1
+    assert review.comments[0].path == "src/app.py"
+    assert review.comments[0].line == 12
+    assert "Runtime validation failed" in review.comments[0].body
+    assert "expected 200, got 500" in review.comments[0].body
+
+
+def test_pr_workflow_orchestrator_degrades_unmapped_validation_failure_into_review_body() -> None:
+    action = _validation_action()
+    review = _review_payload_for_validations(
+        ValidationResult(action=action, outcome=ValidationOutcome.FAIL, details="expected 200, got 500")
+    )
+
+    assert "**FAIL** `GET /health`: expected 200, got 500" in review.body
+    assert review.comments == ()
 
 
 def test_event_orchestrator_dispatches_ci_to_ci_sub_orchestrator():
