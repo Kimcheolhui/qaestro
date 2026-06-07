@@ -32,7 +32,7 @@ class RecordingAzureOpenAIClient(AzureOpenAIChatClient):
 class FailingAzureOpenAIClient(AzureOpenAIChatClient):
     def complete(self, request: dict[str, object]) -> AzureOpenAIClientResponse:
         _ = request
-        raise TimeoutError("azure timed out with credential super-secret-token")
+        raise TimeoutError("azure timed out with credential opaque-runtime-credential")
 
 
 def _supported_config() -> AgentRuntimeConfig:
@@ -70,7 +70,7 @@ def test_azure_openai_runner_builds_provider_neutral_request_without_secret_valu
     runner = AzureOpenAIAgentRunner(
         config=_supported_config(),
         client=client,
-        credential="super-secret-token",
+        credential="opaque-runtime-credential",
     )
     session = runner.start_session(_session())
 
@@ -106,7 +106,7 @@ def test_azure_openai_runner_builds_provider_neutral_request_without_secret_valu
             "credential_present": True,
         }
     ]
-    assert "super-secret-token" not in repr(client.calls[0])
+    assert "opaque-runtime-credential" not in repr(client.calls[0])
 
 
 def test_azure_openai_runner_preserves_explicit_zero_budgets() -> None:
@@ -114,7 +114,7 @@ def test_azure_openai_runner_preserves_explicit_zero_budgets() -> None:
     runner = AzureOpenAIAgentRunner(
         config=_supported_config(),
         client=client,
-        credential="super-secret-token",
+        credential="opaque-runtime-credential",
     )
 
     result = runner.run(
@@ -137,12 +137,15 @@ def test_azure_openai_runner_preserves_explicit_zero_budgets() -> None:
 
 def test_azure_openai_runner_normalizes_response_errors_without_secret_value() -> None:
     client = RecordingAzureOpenAIClient(
-        AzureOpenAIClientResponse(output_text="", error="azure unavailable: super-secret-token")
+        AzureOpenAIClientResponse(
+            output_text="",
+            error="azure unavailable: opaque-runtime-credential Authorization: Bearer opaque-bearer-token at https://private.example/v1",
+        )
     )
     runner = AzureOpenAIAgentRunner(
         config=_supported_config(),
         client=client,
-        credential="super-secret-token",
+        credential="opaque-runtime-credential",
     )
 
     result = runner.run(
@@ -151,14 +154,14 @@ def test_azure_openai_runner_normalizes_response_errors_without_secret_value() -
     )
 
     assert result.status is AgentRunStatus.FAILED
-    assert result.error == "azure unavailable: <redacted>"
+    assert result.error == "azure unavailable: <redacted> Authorization: <redacted> at <redacted-url>"
 
 
 def test_azure_openai_runner_normalizes_client_exceptions_without_secret_value() -> None:
     runner = AzureOpenAIAgentRunner(
         config=_supported_config(),
         client=FailingAzureOpenAIClient(),
-        credential="super-secret-token",
+        credential="opaque-runtime-credential",
     )
 
     result = runner.run(
@@ -173,7 +176,7 @@ def test_azure_openai_runner_normalizes_client_exceptions_without_secret_value()
 def test_agent_runner_factory_builds_azure_openai_runner_from_env() -> None:
     runner = build_agent_runner(
         _supported_config(),
-        environ={"QAESTRO_AZURE_OPENAI_KEY": "super-secret-token"},
+        environ={"QAESTRO_AZURE_OPENAI_KEY": "opaque-runtime-credential"},
         azure_openai_client=RecordingAzureOpenAIClient(AzureOpenAIClientResponse(output_text="ok")),
     )
 
@@ -181,7 +184,7 @@ def test_agent_runner_factory_builds_azure_openai_runner_from_env() -> None:
 
 
 def test_agent_runner_factory_builds_live_azure_openai_runner_from_env() -> None:
-    runner = build_agent_runner(_supported_config(), environ={"QAESTRO_AZURE_OPENAI_KEY": "super-secret-token"})
+    runner = build_agent_runner(_supported_config(), environ={"QAESTRO_AZURE_OPENAI_KEY": "opaque-runtime-credential"})
 
     assert isinstance(runner, AzureOpenAIAgentRunner)
 
@@ -191,7 +194,7 @@ def test_azure_openai_live_smoke_is_not_requested_by_default() -> None:
 
     result = run_azure_openai_live_smoke(
         _supported_config(),
-        environ={"QAESTRO_AZURE_OPENAI_KEY": "super-secret-token"},
+        environ={"QAESTRO_AZURE_OPENAI_KEY": "opaque-runtime-credential"},
         client=client,
         opt_in_live_smoke=False,
     )
@@ -206,7 +209,7 @@ def test_azure_openai_live_smoke_executes_only_when_opted_in_without_leaking_sec
 
     result = run_azure_openai_live_smoke(
         _supported_config(),
-        environ={"QAESTRO_AZURE_OPENAI_KEY": "super-secret-token"},
+        environ={"QAESTRO_AZURE_OPENAI_KEY": "opaque-runtime-credential"},
         client=client,
         opt_in_live_smoke=True,
     )
@@ -215,14 +218,14 @@ def test_azure_openai_live_smoke_executes_only_when_opted_in_without_leaking_sec
     assert client.calls[0]["prompt"] == "Respond with exactly: qaestro-live-smoke-ok"
     assert client.calls[0]["max_turns"] == 1
     assert client.calls[0]["max_tool_calls"] == 0
-    assert "super-secret-token" not in repr(client.calls[0])
-    assert "super-secret-token" not in repr(result)
+    assert "opaque-runtime-credential" not in repr(client.calls[0])
+    assert "opaque-runtime-credential" not in repr(result)
 
 
 def test_azure_openai_live_smoke_normalizes_failures_without_secret_value() -> None:
     result = run_azure_openai_live_smoke(
         _supported_config(),
-        environ={"QAESTRO_AZURE_OPENAI_KEY": "super-secret-token"},
+        environ={"QAESTRO_AZURE_OPENAI_KEY": "opaque-runtime-credential"},
         client=FailingAzureOpenAIClient(),
         opt_in_live_smoke=True,
     )

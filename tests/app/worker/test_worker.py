@@ -217,6 +217,23 @@ def test_worker_reports_failure_after_retries_exhausted() -> None:
     assert poster.payloads == []
 
 
+def test_worker_execution_error_is_redacted_at_result_boundary() -> None:
+    event = _event()
+
+    class FailingOrchestrator:
+        def run(self, event: Event) -> PRWorkflowResult:
+            raise RuntimeError("provider failed token=worker-secret-token at https://private.example.test/v1")
+
+    worker = Worker(orchestrator=FailingOrchestrator(), max_attempts=1)
+
+    execution = worker.process(EventJob(event=event, correlation_id=event.meta.correlation_id))
+
+    assert execution.status is WorkerStatus.FAILED
+    assert "worker-secret-token" not in execution.error
+    assert "private.example.test" not in execution.error
+    assert execution.error == "provider failed token=<redacted> at <redacted-url>"
+
+
 def test_worker_enforces_timeout_per_attempt() -> None:
     event = _event()
 

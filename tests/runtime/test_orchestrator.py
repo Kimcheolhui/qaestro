@@ -292,6 +292,24 @@ def test_pr_workflow_orchestrator_degrades_unmapped_validation_failure_into_revi
     assert review.comments == ()
 
 
+def test_pr_workflow_orchestrator_redacts_secret_like_validation_details_from_review_output() -> None:
+    action = _validation_action()
+    review = _review_payload_for_validations(
+        ValidationResult(
+            action=action,
+            outcome=ValidationOutcome.FAIL,
+            details="provider failed token=review-secret at https://private.example.test/v1",
+            locations=(ValidationLocation(path="src/app.py", line=12),),
+        )
+    )
+    rendered = f"{review.body}\n{review.comments[0].body}"
+
+    assert "review-secret" not in rendered
+    assert "private.example.test" not in rendered
+    assert "token=<redacted>" in rendered
+    assert "<redacted-url>" in rendered
+
+
 def test_event_orchestrator_dispatches_ci_to_ci_sub_orchestrator():
     event = _ci_completed_event()
     orchestrator = EventOrchestrator(ci_orchestrator=CIWorkflowOrchestrator())

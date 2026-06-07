@@ -14,6 +14,7 @@ from src.adapters.connectors.github import (
     ReviewResult,
 )
 from src.adapters.renderers import PRReviewPayload
+from src.shared.redaction import redact_text
 
 from . import ToolCall, ToolCapability, ToolDefinition
 
@@ -137,7 +138,7 @@ def _list_check_runs_for_ref(client: GitHubPRToolClient, call: ToolCall) -> tupl
 
 def _create_or_update_comment(client: GitHubPRToolClient, call: ToolCall) -> CommentResult:
     owner, repo, pr_number = _repo_pr_input(call)
-    body = str(call.input.get("body", ""))
+    body = redact_text(str(call.input.get("body", "")), redact_urls=True)
     marker = str(call.input.get("marker", "")).strip()
     persisted_body = _persisted_comment_body(body, marker)
     for comment in client.list_issue_comments(owner, repo, pr_number):

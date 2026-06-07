@@ -13,6 +13,8 @@ import sys
 from datetime import UTC, datetime
 from typing import Any
 
+from .redaction import redact_text, redact_value
+
 
 class _JsonFormatter(logging.Formatter):
     """Format log records as single-line JSON objects."""
@@ -22,10 +24,10 @@ class _JsonFormatter(logging.Formatter):
             "ts": datetime.now(tz=UTC).isoformat(),
             "level": record.levelname,
             "logger": record.name,
-            "msg": record.getMessage(),
+            "msg": redact_text(record.getMessage(), redact_urls=True),
         }
         if record.exc_info and record.exc_info[1] is not None:
-            payload["exception"] = self.formatException(record.exc_info)
+            payload["exception"] = redact_text(self.formatException(record.exc_info), redact_urls=True)
         # Merge extra fields attached via ``logger.info("msg", extra={...})``.
         # Keep the whitelist explicit so logs stay predictable and don't leak
         # arbitrary objects.
@@ -43,7 +45,7 @@ class _JsonFormatter(logging.Formatter):
         ):
             value = getattr(record, key, None)
             if value is not None:
-                payload[key] = value
+                payload[key] = redact_value(value, redact_urls=True)
         return json.dumps(payload, default=str)
 
 
@@ -54,6 +56,9 @@ class _TextFormatter(logging.Formatter):
 
     def __init__(self) -> None:
         super().__init__(fmt=self.FMT, datefmt="%H:%M:%S")
+
+    def format(self, record: logging.LogRecord) -> str:
+        return redact_text(super().format(record), redact_urls=True)
 
 
 def setup_logging(

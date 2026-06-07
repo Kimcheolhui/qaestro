@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from src.adapters.renderers import GitHubPRCommentRenderer, PRCommentPayload
+from src.adapters.renderers import GitHubPRCommentRenderer, PRCommentPayload, PRReviewComment, PRReviewPayload
 from src.core.contracts import (
     ActionType,
     BehaviourImpact,
@@ -254,6 +254,64 @@ def test_github_pr_comment_renderer_omits_ci_feedback_section_when_absent() -> N
     assert "### CI / Check Feedback" not in payload.body
 
 
+def test_github_pr_comment_renderer_redacts_secret_like_validation_details() -> None:
+    report = _qa_report()
+    action = StrategyAction(
+        action_type=ActionType.VERIFY_API_CONTRACT,
+        description="Probe read-only endpoint",
+        target="GET /health",
+        priority=2,
+        rationale="Runtime validation selected.",
+    )
+    report = QAReport(
+        event_id=report.event_id,
+        repo_full_name=report.repo_full_name,
+        pr_number=report.pr_number,
+        impact=report.impact,
+        strategy=StrategyResult(actions=(action,), reasoning="Runtime validation selected.", confidence=0.4),
+        validations=(
+            ValidationResult(
+                action=action,
+                outcome=ValidationOutcome.ERROR,
+                details="provider failed token=validation-secret at https://private.example.test/v1",
+            ),
+        ),
+        summary_markdown=report.summary_markdown,
+    )
+
+    payload = GitHubPRCommentRenderer().render(report, correlation_id="corr-secret-validation")
+
+    assert "validation-secret" not in payload.body
+    assert "private.example.test" not in payload.body
+    assert "Details: provider failed token=<redacted> at <redacted-url>" in payload.body
+
+
+def test_official_review_payload_redacts_secret_like_body_and_inline_comments_before_submission() -> None:
+    payload = PRReviewPayload(
+        repo_full_name="Kimcheolhui/qaestro",
+        pr_number=42,
+        head_sha="abc123",
+        body="review body token=review-secret at https://private.example.test/v1",
+        comments=(
+            PRReviewComment(
+                path="src/app.py",
+                body="inline body password=inline-secret at https://private.example.test/inline",
+                line=12,
+            ),
+        ),
+    )
+
+    prepared = payload.prepared_for_submission()
+    rendered = f"{prepared.body}\n{prepared.comments[0].body}"
+
+    assert "review-secret" not in rendered
+    assert "inline-secret" not in rendered
+    assert "private.example.test" not in rendered
+    assert "token=<redacted>" in prepared.body
+    assert "password=<redacted>" in prepared.comments[0].body
+    assert "<redacted-url>" in rendered
+
+
 def test_github_pr_comment_renderer_escapes_ci_feedback_markdown_text() -> None:
     ci_feedback = CIFeedbackContext(
         current_head_sha="sha`with`tick",
@@ -319,4 +377,4 @@ def test_pr_comment_renderer_includes_structured_validation_evidence() -> None:
     assert "Outcome: **PASS**" in payload.body
     assert "Duration: `1.234s`" in payload.body
     assert "Details: contract_ok: response schema matched" in payload.body
-    assert "Artifacts: [artifact 1](https://example.test/artifacts/validation.json)" in payload.body
+    assert "Artifacts: [artifact 1](<redacted-url>)" in payload.body

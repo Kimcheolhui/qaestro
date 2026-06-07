@@ -11,6 +11,8 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
+from .redaction import redact_text
+
 
 class AgentRuntimeProvider(StrEnum):
     """Supported Agent Runtime provider families.
@@ -125,7 +127,7 @@ class AppConfig:
             f"github_app_private_key_path={self.github_app_private_key_path!r}",
             f"worker_concurrency={self.worker_concurrency!r}",
             f"queue_backend={self.queue_backend!r}",
-            f"redis_url={self.redis_url!r}",
+            f"redis_url={redact_text(self.redis_url)!r}",
             f"redis_stream={self.redis_stream!r}",
             f"redis_consumer_group={self.redis_consumer_group!r}",
             f"redis_consumer={self.redis_consumer!r}",

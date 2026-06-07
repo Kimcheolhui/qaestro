@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from src.adapters.connectors.github import ReviewCommentInput
 from src.core.contracts import CIFeedbackContext, CIHistoricalEvidence, CIObservation, QAReport, ValidationResult
+from src.shared.redaction import SecretRedactor, redact_text, redact_value
 
 if TYPE_CHECKING:
     from src.runtime.orchestrator.pr_triage import PRWorkflowTriage
@@ -79,10 +80,12 @@ class PRReviewPayload:
 
     def prepared_for_submission(self) -> PRReviewPayload:
         mapped = tuple(
-            _validated_review_comment(comment).with_attribution() for comment in self.comments if comment.is_mapped
+            _validated_review_comment(_redacted_review_comment(comment)).with_attribution()
+            for comment in self.comments
+            if comment.is_mapped
         )
-        unmapped = tuple(comment for comment in self.comments if not comment.is_mapped)
-        body = self.body
+        unmapped = tuple(_redacted_review_comment(comment) for comment in self.comments if not comment.is_mapped)
+        body = _redact_external_text(self.body, redact_urls=True)
         if unmapped:
             body = _append_unmapped_findings(body, unmapped)
         return replace(self, body=_with_attribution(body), event="COMMENT", comments=mapped)
@@ -95,6 +98,14 @@ class PRReviewPayload:
         if marker in self.body:
             return self
         return replace(self, body=f"{self.body.strip()}\n\n{marker}" if self.body.strip() else marker)
+
+
+def _redact_external_text(text: str, *, redact_urls: bool = False) -> str:
+    return SecretRedactor(redact_urls=redact_urls).redact_text(text)
+
+
+def _redacted_review_comment(comment: PRReviewComment) -> PRReviewComment:
+    return replace(comment, body=_redact_external_text(comment.body, redact_urls=True))
 
 
 class GitHubPRCommentRenderer:
@@ -151,7 +162,7 @@ class GitHubPRCommentRenderer:
         return PRCommentPayload(
             repo_full_name=report.repo_full_name,
             pr_number=report.pr_number,
-            body=body,
+            body=_redact_external_text(body),
         )
 
 
@@ -393,10 +404,12 @@ def _validation_result_lines(result: ValidationResult) -> list[str]:
     ]
     if result.duration_seconds > 0:
         lines.append(f"  - Duration: {_inline_code_span(f'{result.duration_seconds:.3f}s')}")
-    detail = result.details or action.rationale
+    detail = redact_text(result.details or action.rationale, redact_urls=True)
     if detail:
         lines.append(f"  - Details: {detail}")
     if result.artifacts:
-        links = ", ".join(f"[artifact {index}]({artifact})" for index, artifact in enumerate(result.artifacts, start=1))
+        redacted_artifacts = redact_value(result.artifacts, redact_urls=True)
+        artifacts = redacted_artifacts if isinstance(redacted_artifacts, tuple) else ()
+        links = ", ".join(f"[artifact {index}]({artifact})" for index, artifact in enumerate(artifacts, start=1))
         lines.append(f"  - Artifacts: {links}")
     return lines

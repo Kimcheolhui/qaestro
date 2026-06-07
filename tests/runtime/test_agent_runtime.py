@@ -64,7 +64,6 @@ def test_session_manager_reuses_workflow_session_without_widening_stage_tools() 
         trigger="manual",
         correlation_id="corr-session",
     )
-
     manager.run_stage(
         session.handle,
         AgentRunInput(
@@ -96,6 +95,38 @@ def test_session_manager_reuses_workflow_session_without_widening_stage_tools() 
     assert [turn.stage for turn in turns] == [WorkflowStage.ANALYZER, WorkflowStage.VALIDATOR]
     assert turns[0].allowed_tool_names == ("github.pr.diff",)
     assert turns[1].allowed_tool_names == ()
+
+
+def test_session_manager_redacts_turn_error_metadata() -> None:
+    class FailingRunner(FakeAgentRunner):
+        def run(self, *, session, run_input):  # type: ignore[no-untyped-def]
+            result = super().run(session=session, run_input=run_input)
+            return type(result)(
+                session=result.session,
+                stage=result.stage,
+                status=AgentRunStatus.FAILED,
+                error="provider failed token=session-secret at https://private.example.test/v1",
+                allowed_tool_names=result.allowed_tool_names,
+            )
+
+    manager = WorkflowAgentSessionManager(runner=FailingRunner(response="ignored"))
+    session = manager.start_workflow_session(
+        repo_full_name="Kimcheolhui/qaestro",
+        pr_number=42,
+        head_sha="abc123",
+        trigger="manual",
+        correlation_id="corr-session",
+    )
+
+    manager.run_stage(
+        session.handle,
+        AgentRunInput(stage=WorkflowStage.VALIDATOR, prompt="Validate", correlation_id="corr-session"),
+    )
+
+    turn = manager.turns_for_session(session.handle.session_id)[0]
+    assert "session-secret" not in turn.error
+    assert "private.example.test" not in turn.error
+    assert turn.error == "provider failed token=<redacted> at <redacted-url>"
 
 
 def test_session_manager_cancels_superseded_head_and_closes_pr_sessions() -> None:

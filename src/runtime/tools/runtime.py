@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Protocol
 
+from src.shared.redaction import redact_text
+
 from .policy import StageToolPolicy
 from .types import ToolAuditEntry, ToolCall, ToolDefinition, ToolResult
 
@@ -41,7 +43,7 @@ class RegisteredToolRuntime:
         try:
             output = definition.handler(call)
         except Exception as exc:
-            error = str(exc)
+            error = redact_text(str(exc), redact_urls=True)
             self._audit_log.append(
                 ToolAuditEntry(
                     stage=call.stage,

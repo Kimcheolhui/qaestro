@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from time import monotonic
 from typing import Protocol
@@ -28,6 +27,7 @@ from src.runtime.tools import (
     ToolCapability,
     ToolDefinition,
 )
+from src.shared.redaction import redact_text, redact_value
 
 _VALIDATION_API_CONTRACT_PROBE = "validation.api_contract.probe"
 _SUPPORTED_API_METHODS = frozenset({"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"})
@@ -299,7 +299,7 @@ class AgentRuntimePRValidator:
             outcome=result.outcome,
             details=_sanitize_pr_facing_details(result.details),
             duration_seconds=result.duration_seconds or elapsed,
-            artifacts=result.artifacts,
+            artifacts=_sanitize_pr_facing_artifacts(result.artifacts),
         )
 
 
@@ -405,17 +405,16 @@ def _agent_runner_status_details(status: AgentRunStatus) -> str:
     return f"agent_runner: Agent Runtime validation ended with status {status.name}."
 
 
-_SECRET_ASSIGNMENT_PATTERN = re.compile(r"(?i)\b(token|password|secret|api[_-]?key|credential)\s*=\s*[^\s,;]+")
-_URL_PATTERN = re.compile(r"https?://[^\s,;)]+")
-
-
 def _sanitize_pr_facing_details(details: str) -> str:
-    """Remove common credential and endpoint fragments from PR-facing details."""
-    sanitized = _SECRET_ASSIGNMENT_PATTERN.sub(
-        lambda match: f"{match.group(1)}=<redacted>",
-        details,
-    )
-    return _URL_PATTERN.sub("<redacted-url>", sanitized)
+    """Remove credential and endpoint fragments from PR-facing details."""
+    return redact_text(details, redact_urls=True)
+
+
+def _sanitize_pr_facing_artifacts(artifacts: tuple[str, ...]) -> tuple[str, ...]:
+    redacted = redact_value(artifacts, redact_urls=True)
+    if not isinstance(redacted, tuple):
+        return ()
+    return tuple(str(item) for item in redacted)
 
 
 def _api_contract_probe_request(

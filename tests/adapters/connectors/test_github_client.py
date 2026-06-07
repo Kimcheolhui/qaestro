@@ -40,7 +40,9 @@ class ManualClock:
 def _token_response() -> FakeResponse:
     base = datetime.fromtimestamp(1_700_000_000.0, tz=UTC)
     expires = base + timedelta(seconds=3600)
-    body = json.dumps({"token": "ghs_test", "expires_at": expires.strftime("%Y-%m-%dT%H:%M:%SZ")}).encode()
+    body = json.dumps(
+        {"token": "opaque-installation-token", "expires_at": expires.strftime("%Y-%m-%dT%H:%M:%SZ")}
+    ).encode()
     return FakeResponse(status=201, body=body)
 
 
@@ -111,7 +113,7 @@ def test_get_pull_request_sets_required_headers(client, transport):
     client.get_pull_request(OWNER, REPO, PR_NUM)
     # First call is the token exchange, second is the actual API call.
     api_call = next(c for c in transport.calls if "/pulls/" in c.url)
-    assert api_call.headers["Authorization"] == "Bearer ghs_test"
+    assert api_call.headers["Authorization"] == "Bearer opaque-installation-token"
     assert api_call.headers["Accept"] == "application/vnd.github+json"
     assert api_call.headers["X-GitHub-Api-Version"] == "2022-11-28"
     assert api_call.headers["User-Agent"] == "qaestro"

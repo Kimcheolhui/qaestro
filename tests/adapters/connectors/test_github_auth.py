@@ -49,7 +49,7 @@ def public_key(private_key: str) -> str:
     )
 
 
-def _make_token_response(token: str = "ghs_abc123", expires_in_seconds: int = 3600) -> FakeResponse:
+def _make_token_response(token: str = "opaque-installation-token", expires_in_seconds: int = 3600) -> FakeResponse:
     # GitHub returns expires_at as ISO-8601 Z. Build one offset from a fixed
     # reference matching ManualClock's start time.
     from datetime import datetime, timedelta
@@ -85,7 +85,7 @@ def test_app_jwt_is_signed_with_rs256_and_decodable(private_key, public_key):
 def test_installation_token_exchange_succeeds(private_key):
     clock = ManualClock()
     transport = FakeTransport()
-    transport.route("POST", TOKEN_URL, _make_token_response("ghs_first"))
+    transport.route("POST", TOKEN_URL, _make_token_response("opaque-installation-token-first"))
     auth = GitHubAppAuth(
         app_id=APP_ID,
         private_key=private_key,
@@ -93,7 +93,7 @@ def test_installation_token_exchange_succeeds(private_key):
         transport=transport,
         clock=clock,
     )
-    assert auth.installation_token() == "ghs_first"
+    assert auth.installation_token() == "opaque-installation-token-first"
     assert len(transport.calls) == 1
     call = transport.calls[0]
     assert call.method == "POST"
@@ -104,7 +104,7 @@ def test_installation_token_exchange_succeeds(private_key):
 def test_installation_token_is_cached(private_key):
     clock = ManualClock()
     transport = FakeTransport()
-    transport.enqueue(_make_token_response("ghs_first", expires_in_seconds=3600))
+    transport.enqueue(_make_token_response("opaque-installation-token-first", expires_in_seconds=3600))
     auth = GitHubAppAuth(
         app_id=APP_ID,
         private_key=private_key,
@@ -112,18 +112,18 @@ def test_installation_token_is_cached(private_key):
         transport=transport,
         clock=clock,
     )
-    assert auth.installation_token() == "ghs_first"
+    assert auth.installation_token() == "opaque-installation-token-first"
     # 30 minutes later — still well within the cache window
     clock.advance(1800)
-    assert auth.installation_token() == "ghs_first"
+    assert auth.installation_token() == "opaque-installation-token-first"
     assert len(transport.calls) == 1  # no second exchange
 
 
 def test_installation_token_refreshes_within_skew_window(private_key):
     clock = ManualClock()
     transport = FakeTransport()
-    transport.enqueue(_make_token_response("ghs_first", expires_in_seconds=3600))
-    transport.enqueue(_make_token_response("ghs_second", expires_in_seconds=3600))
+    transport.enqueue(_make_token_response("opaque-installation-token-first", expires_in_seconds=3600))
+    transport.enqueue(_make_token_response("opaque-installation-token-second", expires_in_seconds=3600))
     auth = GitHubAppAuth(
         app_id=APP_ID,
         private_key=private_key,
@@ -134,7 +134,7 @@ def test_installation_token_refreshes_within_skew_window(private_key):
     auth.installation_token()
     # Jump to 30 s before expiry (well inside the 60 s safety margin)
     clock.advance(3600 - 30)
-    assert auth.installation_token() == "ghs_second"
+    assert auth.installation_token() == "opaque-installation-token-second"
     assert len(transport.calls) == 2
 
 
@@ -144,7 +144,7 @@ def test_installation_token_concurrent_refresh_serialised(private_key):
     transport = FakeTransport()
     # Enqueue more responses than we expect to use — assert only 1 is consumed.
     for i in range(8):
-        transport.enqueue(_make_token_response(f"ghs_{i}", expires_in_seconds=3600))
+        transport.enqueue(_make_token_response(f"opaque-installation-token-{i}", expires_in_seconds=3600))
     auth = GitHubAppAuth(
         app_id=APP_ID,
         private_key=private_key,

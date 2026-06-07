@@ -26,14 +26,14 @@ def test_openai_compatible_runtime_requires_tool_calling_and_structured_output()
         context_window_tokens=16_000,
     )
 
-    result = check_agent_runtime_health(config, environ={"QAESTRO_AGENT_API_KEY": "super-secret-token"})
+    result = check_agent_runtime_health(config, environ={"QAESTRO_AGENT_API_KEY": "opaque-runtime-credential"})
 
     assert result.status is AgentRuntimeHealthStatus.UNSUPPORTED
     assert result.ok is False
     assert "tool calling is required" in result.actionable_errors
     assert "structured output or schema-constrained responses are required" in result.actionable_errors
-    assert "super-secret-token" not in repr(result)
-    assert "super-secret-token" not in str(result.actionable_errors)
+    assert "opaque-runtime-credential" not in repr(result)
+    assert "opaque-runtime-credential" not in str(result.actionable_errors)
 
 
 def test_azure_openai_runtime_reports_missing_endpoint_deployment_api_version_and_credential() -> None:
@@ -75,7 +75,7 @@ def test_enabled_runtime_requires_declared_context_window() -> None:
         context_window_tokens=0,
     )
 
-    result = check_agent_runtime_health(config, environ={"QAESTRO_AGENT_API_KEY": "super-secret-token"})
+    result = check_agent_runtime_health(config, environ={"QAESTRO_AGENT_API_KEY": "opaque-runtime-credential"})
 
     assert result.status is AgentRuntimeHealthStatus.UNSUPPORTED
     assert result.ok is False
@@ -95,7 +95,7 @@ def test_supported_runtime_can_warn_when_live_smoke_is_not_enabled() -> None:
         context_window_tokens=64_000,
     )
 
-    result = check_agent_runtime_health(config, environ={"QAESTRO_AGENT_API_KEY": "super-secret-token"})
+    result = check_agent_runtime_health(config, environ={"QAESTRO_AGENT_API_KEY": "opaque-runtime-credential"})
 
     assert result.status is AgentRuntimeHealthStatus.SUPPORTED
     assert result.ok is True
@@ -104,7 +104,7 @@ def test_supported_runtime_can_warn_when_live_smoke_is_not_enabled() -> None:
         "Live provider smoke check not executed; set opt_in_live_smoke=True to probe provider connectivity.",
     )
     assert result.live_smoke_probe_status is LiveSmokeProbeStatus.NOT_REQUESTED
-    assert "super-secret-token" not in repr(result)
+    assert "opaque-runtime-credential" not in repr(result)
 
 
 def test_opt_in_live_smoke_is_explicitly_not_implemented_until_provider_adapter_exists() -> None:
@@ -120,14 +120,14 @@ def test_opt_in_live_smoke_is_explicitly_not_implemented_until_provider_adapter_
 
     result = check_agent_runtime_health(
         config,
-        environ={"QAESTRO_AGENT_API_KEY": "super-secret-token"},
+        environ={"QAESTRO_AGENT_API_KEY": "opaque-runtime-credential"},
         opt_in_live_smoke=True,
     )
 
     assert result.status is AgentRuntimeHealthStatus.SUPPORTED
     assert result.live_smoke_probe_status is LiveSmokeProbeStatus.NOT_IMPLEMENTED
     assert result.warnings == ("Live provider smoke check was requested but no provider adapter implements it yet.",)
-    assert "super-secret-token" not in repr(result)
+    assert "opaque-runtime-credential" not in repr(result)
 
 
 def test_capability_policy_marks_small_context_window_as_degraded() -> None:
@@ -141,7 +141,7 @@ def test_capability_policy_marks_small_context_window_as_degraded() -> None:
         context_window_tokens=8_000,
     )
 
-    result = check_agent_runtime_health(config, environ={"QAESTRO_AGENT_API_KEY": "super-secret-token"})
+    result = check_agent_runtime_health(config, environ={"QAESTRO_AGENT_API_KEY": "opaque-runtime-credential"})
 
     assert result.status is AgentRuntimeHealthStatus.DEGRADED
     assert result.ok is True

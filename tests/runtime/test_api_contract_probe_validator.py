@@ -143,7 +143,9 @@ def test_agent_runner_errors_are_sanitized_before_validation_details() -> None:
     assert "private.example" not in failed_result.details
     assert executor.requests == []
 
-    raising_runner = RaisingAgentRunner(error="transport crashed password=hunter2 endpoint=https://private.example")
+    raising_runner = RaisingAgentRunner(
+        error="transport crashed password=opaque-password-value endpoint=https://private.example"
+    )
     validator = build_agent_runtime_pr_validator(runner=raising_runner, api_contract_probe_executor=executor)
 
     raised_result = validator.validate_for_event(event=_pr_opened_event(), strategy=_strategy(_api_contract_action()))[
@@ -153,7 +155,7 @@ def test_agent_runner_errors_are_sanitized_before_validation_details() -> None:
     assert raised_result.outcome is ValidationOutcome.ERROR
     assert "agent_runner_exception" in raised_result.details
     assert "RuntimeError" in raised_result.details
-    assert "hunter2" not in raised_result.details
+    assert "opaque-password-value" not in raised_result.details
     assert "private.example" not in raised_result.details
 
 
@@ -185,7 +187,7 @@ def test_validation_session_closes_after_runner_failure_and_exception() -> None:
         (failing_runner.started_sessions[0].session_id, "validation stage complete")
     ]
 
-    raising_runner = RaisingAgentRunner(error="transport crashed password=hunter2")
+    raising_runner = RaisingAgentRunner(error="transport crashed password=opaque-password-value")
     raising_validator = build_agent_runtime_pr_validator(runner=raising_runner, api_contract_probe_executor=executor)
     raising_validator.validate_for_event(event=_pr_opened_event(), strategy=_strategy(_api_contract_action()))
 
@@ -209,7 +211,7 @@ def test_validation_session_closes_after_executor_timeout_and_exception() -> Non
     exception_runner = FakeAgentRunner(response="agent selected validation.api_contract.probe")
     exception_validator = build_agent_runtime_pr_validator(
         runner=exception_runner,
-        api_contract_probe_executor=RecordingProbeExecutor(RuntimeError("password=hunter2")),
+        api_contract_probe_executor=RecordingProbeExecutor(RuntimeError("password=opaque-password-value")),
     )
     exception_validator.validate_for_event(event=_pr_opened_event(), strategy=_strategy(_api_contract_action()))
 
@@ -222,7 +224,11 @@ def test_executor_supplied_details_are_sanitized_before_pr_facing_validation_res
     executor = RecordingProbeExecutor(
         APIContractProbeResult(
             outcome=ValidationOutcome.FAIL,
-            details="probe failed token=secret-token endpoint=https://private.example password=hunter2",
+            details=(
+                "probe failed token=secret-token endpoint=https://private.example password=opaque-password-value "
+                "Authorization: Bearer opaque-bearer-token"
+            ),
+            artifacts=("https://private.example/artifacts?api_key=secret-token",),
         )
     )
     validator = build_agent_runtime_pr_validator(
@@ -231,12 +237,15 @@ def test_executor_supplied_details_are_sanitized_before_pr_facing_validation_res
     )
 
     validation = validator.validate_for_event(event=_pr_opened_event(), strategy=_strategy(_api_contract_action()))[0]
+    rendered = repr(validation)
 
     assert validation.outcome is ValidationOutcome.FAIL
     assert "probe failed" in validation.details
-    assert "secret-token" not in validation.details
-    assert "private.example" not in validation.details
-    assert "hunter2" not in validation.details
+    assert "secret-token" not in rendered
+    assert "private.example" not in rendered
+    assert "opaque-password-value" not in rendered
+    assert "opaque-bearer-token" not in rendered
+    assert validation.artifacts == ("<redacted-url>",)
 
 
 def test_successful_probe_uses_wall_clock_duration_when_executor_duration_is_missing() -> None:
@@ -394,7 +403,9 @@ def test_probe_failures_timeouts_and_partial_failures_are_distinguishable() -> N
     assert "TimeoutError" in timeout.details
     assert "secret-token" not in timeout.details
 
-    exception_executor = RecordingProbeExecutor(RuntimeError("executor transport crashed password=hunter2"))
+    exception_executor = RecordingProbeExecutor(
+        RuntimeError("executor transport crashed password=opaque-password-value")
+    )
     exception_validator = build_agent_runtime_pr_validator(
         runner=FakeAgentRunner(response="agent selected validation.api_contract.probe"),
         api_contract_probe_executor=exception_executor,
@@ -407,7 +418,7 @@ def test_probe_failures_timeouts_and_partial_failures_are_distinguishable() -> N
     assert exception.outcome is ValidationOutcome.ERROR
     assert "exception" in exception.details
     assert "RuntimeError" in exception.details
-    assert "hunter2" not in exception.details
+    assert "opaque-password-value" not in exception.details
 
 
 def test_probe_requires_stage_approved_validation_tool_before_executor_runs() -> None:

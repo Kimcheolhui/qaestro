@@ -8,6 +8,7 @@ from src.adapters.connectors.github import CommentResult, PRMeta, ReviewResult
 from src.adapters.renderers import PRCommentPayload, PRReviewPayload
 from src.runtime.stages import WorkflowStage
 from src.runtime.tools import ToolCall, ToolRuntime
+from src.shared.redaction import redact_text
 
 
 @dataclass(frozen=True)
@@ -143,7 +144,7 @@ class ToolRuntimePRCommentPoster:
                 input={
                     "repo_full_name": payload.repo_full_name,
                     "pr_number": payload.pr_number,
-                    "body": payload.body,
+                    "body": redact_text(payload.body, redact_urls=True),
                     "marker": _qaestro_comment_marker(payload.repo_full_name, payload.pr_number),
                 },
                 correlation_id=correlation_id,

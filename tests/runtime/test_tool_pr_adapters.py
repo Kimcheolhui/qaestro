@@ -155,3 +155,20 @@ def test_tool_runtime_pr_comment_poster_posts_via_output_stage_tool() -> None:
             "corr-tools",
         )
     ]
+
+
+def test_tool_runtime_pr_comment_poster_redacts_body_before_output_stage_tool() -> None:
+    runtime = RecordingRuntime()
+    payload = PRCommentPayload(
+        repo_full_name="octocat/hello-world",
+        pr_number=77,
+        body="report token=comment-secret at https://private.example.test/v1",
+    )
+
+    ToolRuntimePRCommentPoster(runtime).post_comment(payload, correlation_id="corr-tools")
+
+    call = runtime.calls[0]
+    body = call.input["body"]
+    assert "comment-secret" not in body
+    assert "private.example.test" not in body
+    assert body == "report token=<redacted> at <redacted-url>"

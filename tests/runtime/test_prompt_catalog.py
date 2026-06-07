@@ -32,6 +32,19 @@ def test_prompt_catalog_renders_runtime_variables_explicitly() -> None:
     assert "Rationale: API contract changed" in prompt_text
 
 
+def test_validation_prompt_contains_secret_safety_instruction() -> None:
+    prompt_text = render_prompt(
+        PromptId.VALIDATION_API_CONTRACT_PROBE_SELECTION,
+        action_type="verify_api_contract",
+        target="GET /health",
+        description="Check health endpoint",
+        rationale="API contract changed",
+    )
+
+    assert "Do not include secrets, tokens, credentials, private keys, raw provider errors" in prompt_text
+    assert "[REDACTED]" in prompt_text
+
+
 def test_prompt_catalog_rejects_missing_template_variables() -> None:
     with pytest.raises(PromptCatalogError, match="missing template variable"):
         render_prompt(

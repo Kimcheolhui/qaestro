@@ -7,6 +7,7 @@ from enum import Enum, unique
 from typing import Any
 
 from src.runtime.orchestrator import CIWorkflowResult, PRWorkflowResult
+from src.shared.redaction import redact_text
 
 
 @unique
@@ -42,3 +43,7 @@ class WorkerExecution:
     attempts: int
     result: PRWorkflowResult | CIWorkflowResult | None = None
     error: str = ""
+
+    def __post_init__(self) -> None:
+        if self.error:
+            object.__setattr__(self, "error", redact_text(self.error, redact_urls=True))

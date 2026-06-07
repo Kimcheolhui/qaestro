@@ -12,6 +12,7 @@ from src.runtime.agent.fake import FakeAgentRunner
 from src.runtime.agent.health import AgentRuntimeHealthStatus, check_agent_runtime_health
 from src.runtime.agent.types import AgentRunInput, AgentRunner, AgentRunResult, AgentRunStatus, AgentSessionHandle
 from src.shared.config import AgentRuntimeConfig, AgentRuntimeProvider
+from src.shared.redaction import redact_text
 
 
 @dataclass(frozen=True)
@@ -141,6 +142,4 @@ def build_agent_runner(
 
 
 def _redact_secret(value: str, secret: str) -> str:
-    if not secret:
-        return value
-    return value.replace(secret, "<redacted>")
+    return redact_text(value, explicit_secrets=(secret,), redact_urls=True)

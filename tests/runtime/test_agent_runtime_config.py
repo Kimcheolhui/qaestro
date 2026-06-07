@@ -84,3 +84,17 @@ class TestAgentRuntimeConfig:
         )
 
         assert "SECRET_ENV_NAME" not in repr(cfg)
+
+    def test_app_config_repr_redacts_secret_values_in_urls_and_webhook_secret(self) -> None:
+        webhook_value = "opaque-webhook-value"
+        cfg = AppConfig(
+            github_webhook_secret=webhook_value,
+            redis_url="redis://:redis-secret-password@redis.example.test:6379/0",
+        )
+
+        rendered = repr(cfg)
+
+        assert webhook_value not in rendered
+        assert "redis-secret-password" not in rendered
+        assert "github_webhook_secret=<redacted>" in rendered
+        assert "redis://:<redacted>@redis.example.test:6379/0" in rendered

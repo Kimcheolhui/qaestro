@@ -341,6 +341,30 @@ def test_github_pr_comment_tool_posts_rendered_body() -> None:
     ]
 
 
+def test_github_pr_comment_tool_redacts_secret_like_rendered_body() -> None:
+    client = RecordingGitHubClient()
+    runtime = _runtime(client)
+
+    result = runtime.execute(
+        ToolCall(
+            stage=WorkflowStage.OUTPUT,
+            name="github.pr.comment.create_or_update",
+            input={
+                "repo_full_name": "octocat/hello-world",
+                "pr_number": 42,
+                "body": "Behaviour Impact Report token=tool-secret at https://private.example.test/v1",
+            },
+            correlation_id="corr-output",
+        )
+    )
+
+    assert result.ok is True
+    created_body = str(client.calls[-1][4])
+    assert "tool-secret" not in created_body
+    assert "private.example.test" not in created_body
+    assert created_body == "Behaviour Impact Report token=<redacted> at <redacted-url>"
+
+
 def test_github_pr_comment_tool_persists_marker_when_creating_comment() -> None:
     client = RecordingGitHubClient()
     runtime = _runtime(client)

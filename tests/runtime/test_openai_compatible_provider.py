@@ -30,7 +30,7 @@ class RecordingOpenAICompatibleClient(OpenAICompatibleChatClient):
 class FailingOpenAICompatibleClient(OpenAICompatibleChatClient):
     def complete(self, request: dict[str, object]) -> OpenAICompatibleClientResponse:
         _ = request
-        raise TimeoutError("provider timed out with credential super-secret-token")
+        raise TimeoutError("provider timed out with credential opaque-runtime-credential")
 
 
 def _supported_config() -> AgentRuntimeConfig:
@@ -66,7 +66,7 @@ def test_openai_compatible_runner_builds_provider_neutral_request_without_secret
     runner = OpenAICompatibleAgentRunner(
         config=_supported_config(),
         client=client,
-        credential="super-secret-token",
+        credential="opaque-runtime-credential",
     )
     session = runner.start_session(_session())
 
@@ -100,17 +100,20 @@ def test_openai_compatible_runner_builds_provider_neutral_request_without_secret
             "credential_present": True,
         }
     ]
-    assert "super-secret-token" not in repr(client.calls[0])
+    assert "opaque-runtime-credential" not in repr(client.calls[0])
 
 
 def test_openai_compatible_runner_normalizes_client_errors_without_secret_value() -> None:
     client = RecordingOpenAICompatibleClient(
-        OpenAICompatibleClientResponse(output_text="", error="provider unavailable: super-secret-token")
+        OpenAICompatibleClientResponse(
+            output_text="",
+            error="provider unavailable: opaque-runtime-credential Authorization: Bearer opaque-bearer-token at https://private.example/v1",
+        )
     )
     runner = OpenAICompatibleAgentRunner(
         config=_supported_config(),
         client=client,
-        credential="super-secret-token",
+        credential="opaque-runtime-credential",
     )
 
     result = runner.run(
@@ -119,7 +122,7 @@ def test_openai_compatible_runner_normalizes_client_errors_without_secret_value(
     )
 
     assert result.status is AgentRunStatus.FAILED
-    assert result.error == "provider unavailable: <redacted>"
+    assert result.error == "provider unavailable: <redacted> Authorization: <redacted> at <redacted-url>"
 
 
 def test_openai_compatible_runner_preserves_explicit_zero_budgets() -> None:
@@ -127,7 +130,7 @@ def test_openai_compatible_runner_preserves_explicit_zero_budgets() -> None:
     runner = OpenAICompatibleAgentRunner(
         config=_supported_config(),
         client=client,
-        credential="super-secret-token",
+        credential="opaque-runtime-credential",
     )
 
     result = runner.run(
@@ -152,7 +155,7 @@ def test_openai_compatible_runner_normalizes_client_exceptions_without_secret_va
     runner = OpenAICompatibleAgentRunner(
         config=_supported_config(),
         client=FailingOpenAICompatibleClient(),
-        credential="super-secret-token",
+        credential="opaque-runtime-credential",
     )
 
     result = runner.run(
@@ -173,7 +176,7 @@ def test_agent_runner_factory_builds_fake_runner_for_disabled_runtime() -> None:
 def test_agent_runner_factory_builds_openai_compatible_runner_from_env() -> None:
     runner = build_agent_runner(
         _supported_config(),
-        environ={"QAESTRO_AGENT_API_KEY": "super-secret-token"},
+        environ={"QAESTRO_AGENT_API_KEY": "opaque-runtime-credential"},
         openai_compatible_client=RecordingOpenAICompatibleClient(OpenAICompatibleClientResponse(output_text="ok")),
     )
 
@@ -191,11 +194,11 @@ def test_agent_runner_factory_rejects_github_copilot_as_unsupported_provider() -
     )
 
     try:
-        build_agent_runner(config, environ={"QAESTRO_COPILOT_TOKEN": "super-secret-token"})
+        build_agent_runner(config, environ={"QAESTRO_COPILOT_TOKEN": "opaque-runtime-credential"})
     except ValueError as exc:
         message = str(exc)
     else:  # pragma: no cover - assertion clarity
         raise AssertionError("GitHub Copilot provider should be unsupported for non-interactive runtime")
 
     assert "GitHub Copilot is not supported as a non-interactive Agent Runtime provider yet." in message
-    assert "super-secret-token" not in message
+    assert "opaque-runtime-credential" not in message

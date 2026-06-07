@@ -15,6 +15,7 @@ from src.runtime.agent.types import (
     AgentSessionStatus,
     AgentSessionTurn,
 )
+from src.shared.redaction import redact_text
 
 
 class AgentSessionNotFoundError(RuntimeError):
@@ -70,7 +71,7 @@ class WorkflowAgentSessionManager:
             correlation_id=run_input.correlation_id,
             status=result.status,
             allowed_tool_names=run_input.allowed_tool_names,
-            error=result.error,
+            error=redact_text(result.error, redact_urls=True),
         )
         self._records[handle.session_id] = replace(record, turns=(*record.turns, turn))
         return result

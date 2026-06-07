@@ -20,6 +20,7 @@ from src.core.contracts import (
 )
 from src.core.strategy import RuleBasedPRStrategyEngine
 from src.runtime.stages import WorkflowStage
+from src.shared.redaction import redact_text
 
 from .pr_context import EventPRContextProvider, PRContextProvider
 from .pr_triage import PRWorkflowDepth, PRWorkflowTriage, RuleBasedPRWorkflowTriageClassifier
@@ -188,7 +189,7 @@ def _review_inline_comments(draft: PRWorkflowDraft) -> tuple[PRReviewComment, ..
             if not location.path.strip() or location.line <= 0:
                 continue
             target = result.action.target or result.action.description
-            detail = result.details or result.action.rationale
+            detail = redact_text(result.details or result.action.rationale, redact_urls=True)
             suffix = f": {detail}" if detail else ""
             comments.append(
                 PRReviewComment(
@@ -206,7 +207,7 @@ def _review_validation_lines(validations: tuple[ValidationResult, ...]) -> list[
     for result in validations:
         status = result.outcome.value.upper()
         target = result.action.target or result.action.description
-        detail = result.details or result.action.rationale
+        detail = redact_text(result.details or result.action.rationale, redact_urls=True)
         suffix = f": {detail}" if detail else ""
         lines.append(f"- **{status}** `{target}`{suffix}")
     return lines

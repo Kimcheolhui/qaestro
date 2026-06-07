@@ -27,11 +27,11 @@ def test_worker_agent_runtime_health_fails_closed_for_unsupported_config() -> No
     )
 
     try:
-        check_worker_agent_runtime_health(cfg, environ={"QAESTRO_AGENT_API_KEY": "super-secret-token"})
+        check_worker_agent_runtime_health(cfg, environ={"QAESTRO_AGENT_API_KEY": "opaque-runtime-credential"})
     except AgentRuntimeUnavailableError as exc:
         message = str(exc)
     else:  # pragma: no cover - assertion clarity
         raise AssertionError("unsupported Agent Runtime config should fail closed")
 
     assert "tool calling is required" in message
-    assert "super-secret-token" not in message
+    assert "opaque-runtime-credential" not in message

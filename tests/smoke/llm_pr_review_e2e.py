@@ -78,7 +78,7 @@ class SmokeGitHubAuth:
 
     This is intentionally not used by production worker construction. It lets the
     smoke exercise the same GitHubClient/ToolRuntime boundaries with a temporary
-    token when GitHub App private-key material is unavailable in a local or VM
+    token when GitHub App key material is unavailable in a local or VM
     verification environment.
     """
 

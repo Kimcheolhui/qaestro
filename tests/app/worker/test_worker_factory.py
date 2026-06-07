@@ -46,7 +46,7 @@ def test_build_worker_rejects_durable_queue_without_github_app_id() -> None:
 
 def test_build_worker_rejects_durable_queue_without_installation_id(tmp_path: Path) -> None:
     key_path = tmp_path / "app.pem"
-    key_path.write_text("private-key", encoding="utf-8")
+    key_path.write_text("not-a-real-key-material", encoding="utf-8")
     cfg = AppConfig(
         queue_backend="redis-streams",
         github_app_id=1,
@@ -76,7 +76,7 @@ def test_build_worker_rejects_durable_queue_without_private_key_path() -> None:
 
 def test_build_worker_wires_github_tool_runtime_for_durable_queue(tmp_path: Path) -> None:
     key_path = tmp_path / "app.pem"
-    key_path.write_text("private-key", encoding="utf-8")
+    key_path.write_text("not-a-real-key-material", encoding="utf-8")
     cfg = AppConfig(
         queue_backend="redis-streams",
         github_app_id=1,

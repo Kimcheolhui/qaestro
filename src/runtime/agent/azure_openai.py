@@ -14,6 +14,7 @@ from src.runtime.agent.health import LiveSmokeProbeStatus
 from src.runtime.agent.types import AgentRunInput, AgentRunResult, AgentRunStatus, AgentSessionHandle, AgentSessionScope
 from src.runtime.stages import WorkflowStage
 from src.shared.config import AgentRuntimeConfig
+from src.shared.redaction import redact_text
 
 
 @dataclass(frozen=True)
@@ -228,6 +229,4 @@ def _extract_output_text(payload: object) -> str:
 
 
 def _redact_secret(value: str, secret: str) -> str:
-    if not secret:
-        return value
-    return value.replace(secret, "<redacted>")
+    return redact_text(value, explicit_secrets=(secret,), redact_urls=True)
