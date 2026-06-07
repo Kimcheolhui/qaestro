@@ -127,6 +127,8 @@ class Worker:
         while (job := queue.dequeue()) is not None:
             execution = self.process(job)
             results.append(execution)
+            if execution.status is WorkerStatus.FAILED:
+                self._log_failed_execution(job, execution)
             queue.ack(job)
         return tuple(results)
 

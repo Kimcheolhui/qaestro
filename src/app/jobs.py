@@ -154,6 +154,7 @@ class RedisStreamsJobQueue:
         self._claim_idle_ms = claim_idle_ms
         self._busy_group_error = busy_group_error
         self._claim_start_id = "0-0"
+        _validate_redis_timing(read_block_ms=read_block_ms, claim_idle_ms=claim_idle_ms)
         self._ensure_group()
 
     @classmethod
@@ -205,6 +206,10 @@ class RedisStreamsJobQueue:
         if job.delivery_id:
             self._redis.xack(self._stream, self._group, job.delivery_id)
 
+    @staticmethod
+    def validate_timing(*, read_block_ms: int, claim_idle_ms: int) -> None:
+        _validate_redis_timing(read_block_ms=read_block_ms, claim_idle_ms=claim_idle_ms)
+
     def _ensure_group(self) -> None:
         try:
             self._redis.xgroup_create(self._stream, self._group, "0", mkstream=True)
@@ -233,6 +238,17 @@ class RedisStreamsJobQueue:
         if not messages:
             return None
         return _job_from_message(messages[0])
+
+
+def _validate_redis_timing(*, read_block_ms: int, claim_idle_ms: int) -> None:
+    if read_block_ms < 0:
+        raise ValueError("read_block_ms must be >= 0")
+    if claim_idle_ms < 0:
+        raise ValueError("claim_idle_ms must be >= 0")
+    if read_block_ms > 0 and claim_idle_ms < read_block_ms:
+        raise ValueError(
+            "redis_claim_idle_ms/claim_idle_ms must be >= redis_read_block_ms/read_block_ms to avoid reclaiming normal blocking reads"
+        )
 
 
 def _job_from_message(message: tuple[Any, Mapping[Any, Any]]) -> QueuedJob:

@@ -16,6 +16,10 @@ def build_job_queue(cfg: AppConfig, *, consumer: str | None = None) -> JobQueue:
     if cfg.queue_backend == "memory":
         return InMemoryJobQueue()
     if cfg.queue_backend == "redis-streams":
+        RedisStreamsJobQueue.validate_timing(
+            read_block_ms=cfg.redis_read_block_ms,
+            claim_idle_ms=cfg.redis_claim_idle_ms,
+        )
         return RedisStreamsJobQueue.from_url(
             cfg.redis_url,
             stream=cfg.redis_stream,

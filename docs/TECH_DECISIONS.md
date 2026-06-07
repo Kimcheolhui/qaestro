@@ -88,9 +88,11 @@ Step 2의 기본 local/test 구현은 `InMemoryJobQueue`를 유지한다. 단일
 
 - gateway는 normalized `EventJob`을 stream에 `XADD`한다.
 - worker는 consumer group으로 job을 읽고, 처리 후 `XACK`한다.
-- worker 재시작/장애 후에는 stale pending message를 claim해서 재처리할 수 있다. 기본 claim idle은 300000ms(5분)로 두며, 운영에서는 정상 처리 중인 long-running job이 중복 claim되지 않도록 최대 처리 시간보다 크게 잡는다.
+- worker 재시작/장애 후에는 stale pending message를 claim해서 재처리할 수 있다. 기본 claim idle은 300000ms(5분)로 두며, 운영에서는 정상 처리 중인 long-running job이 중복 claim되지 않도록 최대 처리 시간보다 크게 잡는다. Queue construction은 `redis_claim_idle_ms >= redis_read_block_ms`를 요구해 정상 blocking read보다 짧은 pending reclaim 설정을 막는다. 실제 LLM/provider validation 시간이 더 긴 환경에서는 timeout/processing budget보다 충분히 큰 claim idle을 운영 설정으로 둬야 한다.
 - Step 2에서는 worker process를 long-lived consumer로 실행한다. `memory` backend만 local drain-and-exit 모드로 동작한다.
-- 실패 job은 retry가 모두 끝난 뒤 ack하고 `correlation_id`, `delivery_id`, `attempts`, `error`를 포함한 structured error log를 남긴다. dead-letter 저장소와 운영 모니터링은 Step 10 운영 안정화에서 확장한다. 단, output write 이후 ack, duplicate delivery idempotency, malformed payload 처리처럼 Step 7 전에 필요한 최소 worker hardening은 Step 6.5에서 별도 점검한다.
+- 성공 job은 orchestrator와 output poster가 모두 완료된 뒤 ack한다. output write가 실패하면 worker는 configured attempt 내에서 재시도하고, terminal failure가 된 뒤에야 실패 log를 남기고 ack한다. 이렇게 하면 Redis pending entry가 output 실패를 성공 처리로 오인해 사라지지 않는다.
+- 실패 job은 retry가 모두 끝난 뒤 ack하고, ack 직전 `correlation_id`, `delivery_id`, `attempts`, `error`, `job_type`을 포함한 structured error log를 남긴다. Malformed payload도 `MalformedEventJob`으로 변환해 동일하게 terminal failure로 기록/ack한다. dead-letter 저장소, metrics, heartbeat/liveness status는 Step 10 운영 안정화 영역으로 남긴다. Step 6.5에서는 ack/write ordering, malformed-message terminal handling, Redis timing guardrail, managed comment/review idempotency marker를 최소 foundation으로 고정한다.
+- Duplicate delivery나 retry가 발생해도 managed summary comment는 stable marker(`Repository`/`Pull request`) 기반 create-or-update로 수렴하고, official review는 current head + correlation marker로 duplicate lookup을 수행한다. 완전한 cross-process aggregate persistence와 heartbeat 기반 in-flight observability는 Step 7 이후 ChatOps가 aggregate state를 의존하기 전 별도 persistence/operability work에서 확장한다.
 
 Redis Streams를 우선 선택한 이유는 Step 2 목표인 gateway/worker process 분리를 가장 낮은 운영 부담으로 검증할 수 있고, NATS JetStream보다 현재 self-hosted MVP의 도입면이 작기 때문이다. NATS JetStream은 이벤트 버스 중심 구조가 커질 때 다시 검토한다.
 

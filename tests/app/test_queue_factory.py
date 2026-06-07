@@ -21,6 +21,10 @@ def test_build_job_queue_uses_redis_stream_settings(monkeypatch: pytest.MonkeyPa
     calls: list[dict[str, Any]] = []
 
     class FakeRedisStreamsQueue:
+        @staticmethod
+        def validate_timing(*, read_block_ms: int, claim_idle_ms: int) -> None:
+            assert read_block_ms <= claim_idle_ms
+
         @classmethod
         def from_url(cls, redis_url: str, **kwargs: Any) -> FakeRedisStreamsQueue:
             calls.append({"redis_url": redis_url, **kwargs})
@@ -50,6 +54,13 @@ def test_build_job_queue_uses_redis_stream_settings(monkeypatch: pytest.MonkeyPa
             "claim_idle_ms": 60000,
         }
     ]
+
+
+def test_build_job_queue_rejects_unsafe_redis_claim_idle() -> None:
+    cfg = AppConfig(queue_backend="redis-streams", redis_read_block_ms=6000, redis_claim_idle_ms=5000)
+
+    with pytest.raises(ValueError, match="redis_claim_idle_ms"):
+        build_job_queue(cfg)
 
 
 def test_build_job_queue_rejects_unknown_backend() -> None:
