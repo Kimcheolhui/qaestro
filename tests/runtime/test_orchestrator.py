@@ -228,6 +228,22 @@ def test_pr_workflow_orchestrator_sets_basic_official_review_payload_fields() ->
     assert "Runtime Validation Review" in review.body
 
 
+def test_pr_workflow_orchestrator_holds_final_review_payload_while_current_head_checks_are_pending() -> None:
+    def pending_ci_feedback(event: PREvent) -> CIFeedbackContext:
+        return CIFeedbackContext(
+            current_head_sha=event.head_sha,
+            readiness=CIReadinessState.WAITING_FOR_CHECKS,
+            pending_checks=("CI Pipeline",),
+        )
+
+    result = PRWorkflowOrchestrator(ci_feedback_provider=pending_ci_feedback).run(_review_output_event())
+
+    assert result.comment_payload is not None
+    assert "Readiness: **WAITING FOR CHECKS**" in result.comment_payload.body
+    assert "Pending checks: `CI Pipeline`" in result.comment_payload.body
+    assert result.review_payload is None
+
+
 def test_pr_workflow_orchestrator_keeps_passing_validation_evidence_out_of_inline_comments() -> None:
     action = _validation_action()
     review = _review_payload_for_validations(

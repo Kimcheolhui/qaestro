@@ -108,6 +108,11 @@ class CIWorkflowRunRecord:
             is_current_head=event.commit_sha == current_head_sha,
         )
 
+    def as_historical(self) -> CIWorkflowRunRecord:
+        if not self.is_current_head:
+            return self
+        return replace(self, is_current_head=False)
+
 
 @dataclass(frozen=True)
 class PRRevisionState:
@@ -126,9 +131,13 @@ class PRRevisionState:
         return replace(self, ci_runs=(*self.ci_runs, record))
 
     def supersede(self) -> PRRevisionState:
-        if self.status is PRRevisionStatus.SUPERSEDED:
+        if self.status is PRRevisionStatus.SUPERSEDED and all(not record.is_current_head for record in self.ci_runs):
             return self
-        return replace(self, status=PRRevisionStatus.SUPERSEDED)
+        return replace(
+            self,
+            status=PRRevisionStatus.SUPERSEDED,
+            ci_runs=tuple(record.as_historical() for record in self.ci_runs),
+        )
 
 
 @dataclass(frozen=True)
@@ -306,6 +315,19 @@ class InMemoryPRAggregateStore:
         if existing is None:
             return None
         return self.save(existing.record_ci_completed(event))
+
+    def start_review_run(
+        self,
+        *,
+        repo_full_name: str,
+        pr_number: int,
+        trigger: ReviewRunTrigger,
+        requested_by: str = "",
+    ) -> PRAggregateState | None:
+        existing = self.get(repo_full_name, pr_number)
+        if existing is None:
+            return None
+        return self.save(existing.start_review_run(trigger=trigger, requested_by=requested_by))
 
 
 def _head_sha_for(event: PREvent) -> str:

@@ -10,6 +10,7 @@ from src.core.analyzer import PRAnalysisContext, RuleBasedPRBehaviourAnalyzer
 from src.core.contracts import (
     BehaviourImpact,
     CIFeedbackContext,
+    CIReadinessState,
     PREvent,
     QAReport,
     RiskLevel,
@@ -135,7 +136,7 @@ class PRWorkflowOrchestrator:
         stage_order = (*stages, WorkflowStage.RENDERER)
         draft = PRWorkflowDraft(event=event, report=report, triage=triage, stage_order=stage_order)
         comment_payload = self._renderer.render(draft)
-        review_payload = _review_payload_for_draft(draft)
+        review_payload = _review_payload_for_draft(draft) if _can_publish_official_review(ci_feedback) else None
         return PRWorkflowResult(
             event=event,
             report=report,
@@ -144,6 +145,10 @@ class PRWorkflowOrchestrator:
             review_payload=review_payload,
             stage_order=stage_order,
         )
+
+
+def _can_publish_official_review(ci_feedback: CIFeedbackContext | None) -> bool:
+    return ci_feedback is None or ci_feedback.readiness is not CIReadinessState.WAITING_FOR_CHECKS
 
 
 def _review_payload_for_draft(draft: PRWorkflowDraft) -> PRReviewPayload | None:
