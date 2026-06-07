@@ -17,6 +17,7 @@ from src.core.contracts import (
 from src.runtime.orchestrator import (
     CheckRunSnapshot,
     CheckRunStatus,
+    InMemoryPRAggregateStore,
     PRAggregateState,
     PRRevisionStatus,
     ReviewReadinessState,
@@ -110,6 +111,47 @@ def test_new_pr_head_supersedes_previous_revision_but_keeps_historical_evidence(
     assert aggregate.current_revision.head_sha == "sha-2"
     assert aggregate.current_revision.ci_runs == ()
     assert aggregate.current_revision.status is PRRevisionStatus.CURRENT
+
+
+def test_superseded_revision_relabels_previous_current_ci_runs_as_historical() -> None:
+    aggregate = PRAggregateState.from_pr_event(_pr_event(head_sha="sha-1"))
+    aggregate = aggregate.record_ci_completed(
+        _ci_event(event_id="ci-current", commit_sha="sha-1", conclusion="success")
+    )
+    assert aggregate.revisions["sha-1"].ci_runs[0].is_current_head is True
+
+    aggregate = aggregate.apply_pr_event(_pr_update(head_sha="sha-2"))
+
+    assert aggregate.revisions["sha-1"].status is PRRevisionStatus.SUPERSEDED
+    assert aggregate.revisions["sha-1"].ci_runs[0].is_current_head is False
+
+
+def test_store_records_manual_review_trigger_for_existing_aggregate_only() -> None:
+    store = InMemoryPRAggregateStore()
+
+    assert (
+        store.start_review_run(
+            repo_full_name="Kimcheolhui/qaestro",
+            pr_number=54,
+            trigger=ReviewRunTrigger.MANUAL,
+            requested_by="Kimcheolhui",
+        )
+        is None
+    )
+
+    store.apply_pr_event(_pr_event(head_sha="sha-1"))
+    aggregate = store.start_review_run(
+        repo_full_name="Kimcheolhui/qaestro",
+        pr_number=54,
+        trigger=ReviewRunTrigger.MANUAL,
+        requested_by="Kimcheolhui",
+    )
+
+    assert aggregate is not None
+    assert aggregate.review_runs[-1].head_sha == "sha-1"
+    assert aggregate.review_runs[-1].trigger is ReviewRunTrigger.MANUAL
+    assert aggregate.review_runs[-1].requested_by == "Kimcheolhui"
+    assert store.get("Kimcheolhui/qaestro", 54) == aggregate
 
 
 def test_stale_ci_result_is_recorded_without_affecting_current_readiness() -> None:

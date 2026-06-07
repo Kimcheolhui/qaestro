@@ -7,7 +7,7 @@ import hmac
 import json
 from pathlib import Path
 
-from src.adapters.renderers import PRCommentPayload
+from src.adapters.renderers import PRCommentPayload, PRReviewPayload
 from src.app.gateway import GitHubWebhookGateway, WebhookRequest
 from src.app.jobs import InMemoryJobQueue
 from src.app.worker import Worker, WorkerStatus
@@ -33,10 +33,20 @@ CURRENT_HEAD_SHA = "fed321cba987654"
 class RecordingOutputPoster:
     def __init__(self) -> None:
         self.payloads: list[PRCommentPayload] = []
+        self.review_payloads: list[PRReviewPayload | None] = []
         self.correlation_ids: list[str] = []
 
     def post_comment(self, payload: PRCommentPayload, *, correlation_id: str) -> object:
         self.payloads.append(payload)
+        self.review_payloads.append(None)
+        self.correlation_ids.append(correlation_id)
+        return correlation_id
+
+    def post_outputs(
+        self, payload: PRCommentPayload, *, review_payload: PRReviewPayload | None, correlation_id: str
+    ) -> object:
+        self.payloads.append(payload)
+        self.review_payloads.append(review_payload)
         self.correlation_ids.append(correlation_id)
         return correlation_id
 
@@ -221,6 +231,8 @@ def test_ci_feedback_loop_replay_separates_pending_current_head_and_stale_histor
     assert pending_executions[1].result is not None
     assert pending_executions[1].result.comment_payload is None
     assert poster.correlation_ids == ["delivery-pr-open", "delivery-pr-sync-pending"]
+    assert poster.review_payloads[0] is not None
+    assert poster.review_payloads[1] is None
     assert check_provider.calls == [
         ("acme-corp/web-api", OLD_HEAD_SHA, "delivery-pr-open"),
         ("acme-corp/web-api", CURRENT_HEAD_SHA, "delivery-pr-sync-pending"),
@@ -257,6 +269,9 @@ def test_ci_feedback_loop_replay_separates_pending_current_head_and_stale_histor
     assert final_executions[0].result is not None
     assert final_executions[0].result.comment_payload is None
     assert poster.correlation_ids == ["delivery-pr-open", "delivery-pr-sync-pending", "delivery-pr-sync-final"]
+    assert poster.review_payloads[0] is not None
+    assert poster.review_payloads[1] is None
+    assert poster.review_payloads[-1] is not None
     assert check_provider.calls == [
         ("acme-corp/web-api", OLD_HEAD_SHA, "delivery-pr-open"),
         ("acme-corp/web-api", CURRENT_HEAD_SHA, "delivery-pr-sync-pending"),
