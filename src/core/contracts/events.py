@@ -17,6 +17,8 @@ class EventType(Enum):
 
     PR_OPENED = "pr_opened"
     PR_UPDATED = "pr_updated"
+    PR_REVIEW_REQUESTED = "pr_review_requested"
+    PR_REVIEW_REQUEST_REMOVED = "pr_review_request_removed"
     PR_COMMENTED = "pr_commented"
     PR_REVIEWED = "pr_reviewed"
     CI_COMPLETED = "ci_completed"
@@ -104,6 +106,40 @@ class PRUpdated(PREvent):
 
 
 @dataclass(frozen=True)
+class PRReviewRequestEvent(PREvent):
+    """Base fields for GitHub reviewer-request activation events."""
+
+    requested_reviewer: str = ""
+    requested_team: str = ""
+
+    @property
+    def requested_identity(self) -> str:
+        return self.requested_reviewer or self.requested_team
+
+    def matches_identity(
+        self,
+        *,
+        reviewer_logins: tuple[str, ...] = (),
+        team_slugs: tuple[str, ...] = (),
+    ) -> bool:
+        reviewer = self.requested_reviewer.casefold()
+        team = self.requested_team.casefold()
+        reviewer_matches = bool(reviewer) and reviewer in {item.casefold() for item in reviewer_logins}
+        team_matches = bool(team) and team in {item.casefold() for item in team_slugs}
+        return reviewer_matches or team_matches
+
+
+@dataclass(frozen=True)
+class PRReviewRequested(PRReviewRequestEvent):
+    """Qaestro or another reviewer/team was requested on a pull request."""
+
+
+@dataclass(frozen=True)
+class PRReviewRequestRemoved(PRReviewRequestEvent):
+    """A reviewer/team request was removed from a pull request."""
+
+
+@dataclass(frozen=True)
 class PRCommented:
     """A comment was posted on a pull request."""
 
@@ -169,4 +205,13 @@ class ChatMention:
 
 
 # Union of all concrete event types
-Event = PROpened | PRUpdated | PRCommented | PRReviewed | CICompleted | ChatMention
+Event = (
+    PROpened
+    | PRUpdated
+    | PRReviewRequested
+    | PRReviewRequestRemoved
+    | PRCommented
+    | PRReviewed
+    | CICompleted
+    | ChatMention
+)

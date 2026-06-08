@@ -18,9 +18,10 @@ from src.core.contracts import (
     EventType,
     FileChange,
     PRCommented,
-    PREvent,
     PROpened,
     PRReviewed,
+    PRReviewRequested,
+    PRReviewRequestRemoved,
     PRUpdated,
 )
 
@@ -301,11 +302,13 @@ def _event_to_payload(event: Event) -> dict[str, Any]:
 def _event_from_payload(data: Mapping[str, Any]) -> Event:
     kind = EventType(_require_str(data.get("kind"), "kind"))
     meta = _meta_from_payload(_require_mapping(data.get("meta"), "meta"))
-    if kind in {EventType.PR_OPENED, EventType.PR_UPDATED}:
-        pr_event = _pr_event_from_payload(kind, meta, data)
-        if isinstance(pr_event, PROpened | PRUpdated):
-            return pr_event
-        raise ValueError(f"Unsupported PR event type: {kind.value}")
+    if kind in {
+        EventType.PR_OPENED,
+        EventType.PR_UPDATED,
+        EventType.PR_REVIEW_REQUESTED,
+        EventType.PR_REVIEW_REQUEST_REMOVED,
+    }:
+        return _pr_event_from_payload(kind, meta, data)
     if kind is EventType.PR_COMMENTED:
         return PRCommented(
             meta=meta,
@@ -354,27 +357,47 @@ def _event_from_payload(data: Mapping[str, Any]) -> Event:
     raise ValueError(f"Unsupported event type: {kind.value}")
 
 
-def _pr_event_from_payload(kind: EventType, meta: EventMeta, data: Mapping[str, Any]) -> PREvent:
+def _pr_event_from_payload(
+    kind: EventType,
+    meta: EventMeta,
+    data: Mapping[str, Any],
+) -> PROpened | PRUpdated | PRReviewRequested | PRReviewRequestRemoved:
     file_values = data.get("files_changed", ())
     if not isinstance(file_values, list | tuple):
         raise TypeError("files_changed must be a list or tuple")
-    event_cls = PROpened if kind is EventType.PR_OPENED else PRUpdated
-    return event_cls(
-        meta=meta,
-        repo_full_name=_require_str(data.get("repo_full_name"), "repo_full_name"),
-        pr_number=_require_int(data.get("pr_number"), "pr_number"),
-        title=_require_str(data.get("title"), "title"),
-        body=_require_str(data.get("body"), "body"),
-        author=_require_str(data.get("author"), "author"),
-        base_branch=_require_str(data.get("base_branch"), "base_branch"),
-        head_branch=_require_str(data.get("head_branch"), "head_branch"),
-        diff_url=_require_str(data.get("diff_url"), "diff_url"),
-        files_changed=tuple(
+    common_kwargs: dict[str, Any] = {
+        "meta": meta,
+        "repo_full_name": _require_str(data.get("repo_full_name"), "repo_full_name"),
+        "pr_number": _require_int(data.get("pr_number"), "pr_number"),
+        "title": _require_str(data.get("title"), "title"),
+        "body": _require_str(data.get("body"), "body"),
+        "author": _require_str(data.get("author"), "author"),
+        "base_branch": _require_str(data.get("base_branch"), "base_branch"),
+        "head_branch": _require_str(data.get("head_branch"), "head_branch"),
+        "diff_url": _require_str(data.get("diff_url"), "diff_url"),
+        "files_changed": tuple(
             _file_change_from_payload(file_data, f"files_changed[{index}]")
             for index, file_data in enumerate(file_values)
         ),
-        head_sha=_require_str(data.get("head_sha", ""), "head_sha"),
-    )
+        "head_sha": _require_str(data.get("head_sha", ""), "head_sha"),
+    }
+    if kind is EventType.PR_OPENED:
+        return PROpened(**common_kwargs)
+    if kind is EventType.PR_UPDATED:
+        return PRUpdated(**common_kwargs)
+    if kind is EventType.PR_REVIEW_REQUESTED:
+        return PRReviewRequested(
+            **common_kwargs,
+            requested_reviewer=_require_str(data.get("requested_reviewer", ""), "requested_reviewer"),
+            requested_team=_require_str(data.get("requested_team", ""), "requested_team"),
+        )
+    if kind is EventType.PR_REVIEW_REQUEST_REMOVED:
+        return PRReviewRequestRemoved(
+            **common_kwargs,
+            requested_reviewer=_require_str(data.get("requested_reviewer", ""), "requested_reviewer"),
+            requested_team=_require_str(data.get("requested_team", ""), "requested_team"),
+        )
+    raise ValueError(f"Unsupported PR event type: {kind.value}")
 
 
 def _file_change_from_payload(data: object, field: str) -> FileChange:

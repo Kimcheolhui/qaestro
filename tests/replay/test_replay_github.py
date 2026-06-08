@@ -16,6 +16,8 @@ from src.core.contracts.events import (
     PRCommented,
     PROpened,
     PRReviewed,
+    PRReviewRequested,
+    PRReviewRequestRemoved,
     PRUpdated,
 )
 from src.core.contracts.parsers import (
@@ -61,9 +63,40 @@ class TestGitHubPRReplay:
 
     def test_unhandled_action_returns_none(self):
         payload = json.loads((FIXTURES / "github_pr_opened.json").read_text())
-        for action in ("labeled", "closed", "assigned", "review_requested", "unlabeled"):
+        for action in ("labeled", "closed", "assigned", "unlabeled"):
             event = parse_github_pr_event(payload, action=action, correlation_id=f"test-skip-{action}")
             assert event is None, f"action={action!r} should return None"
+
+    def test_review_requested_action_returns_activation_event_for_matching_reviewer_shape(self):
+        payload = json.loads((FIXTURES / "github_pr_opened.json").read_text())
+        payload["requested_reviewer"] = {"login": "qaestro[bot]"}
+
+        event = parse_github_pr_event(payload, action="review_requested", correlation_id="test-review-requested")
+
+        assert event is not None
+        assert isinstance(event, PRReviewRequested)
+        assert event.meta.event_type is EventType.PR_REVIEW_REQUESTED
+        assert event.pr_number == 123
+        assert event.repo_full_name == "acme-corp/web-api"
+        assert event.head_sha == "def789abc123456"
+        assert event.requested_reviewer == "qaestro[bot]"
+        assert event.requested_team == ""
+
+    def test_review_request_removed_action_returns_activation_removal_event_for_team_shape(self):
+        payload = json.loads((FIXTURES / "github_pr_opened.json").read_text())
+        payload["requested_team"] = {"slug": "qaestro-reviewers", "name": "Qaestro Reviewers"}
+
+        event = parse_github_pr_event(
+            payload,
+            action="review_request_removed",
+            correlation_id="test-review-request-removed",
+        )
+
+        assert event is not None
+        assert isinstance(event, PRReviewRequestRemoved)
+        assert event.meta.event_type is EventType.PR_REVIEW_REQUEST_REMOVED
+        assert event.requested_reviewer == ""
+        assert event.requested_team == "qaestro-reviewers"
 
     def test_empty_payload_does_not_crash(self):
         event = parse_github_pr_event({}, action="opened", correlation_id="test-empty")

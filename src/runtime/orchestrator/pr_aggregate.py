@@ -13,6 +13,8 @@ from src.core.contracts import (
     CIObservation,
     CIReadinessState,
     PREvent,
+    PRReviewRequested,
+    PRReviewRequestRemoved,
 )
 
 
@@ -46,6 +48,7 @@ class ReviewRunTrigger(StrEnum):
 
     MANUAL = "manual"
     AUTO = "auto"
+    REVIEW_REQUESTED = "review_requested"
     CI_COMPLETED = "ci_completed"
 
 
@@ -178,6 +181,8 @@ class PRAggregateState:
     revisions: dict[str, PRRevisionState] = field(default_factory=dict)
     event_ids: tuple[str, ...] = ()
     review_runs: tuple[ReviewRun, ...] = ()
+    qaestro_active: bool = False
+    activation_requested_by: str = ""
 
     @classmethod
     def from_pr_event(cls, event: PREvent) -> PRAggregateState:
@@ -214,6 +219,47 @@ class PRAggregateState:
             revisions=revisions,
             event_ids=_append_unique(self.event_ids, event.meta.event_id),
         )
+
+    def apply_review_request(
+        self,
+        event: PRReviewRequested,
+        *,
+        qaestro_reviewers: tuple[str, ...] = (),
+        qaestro_teams: tuple[str, ...] = (),
+    ) -> PRAggregateState:
+        duplicate_review_request = event.meta.event_id in self.event_ids and any(
+            run.trigger is ReviewRunTrigger.REVIEW_REQUESTED and run.requested_by == event.requested_identity
+            for run in self.review_runs
+        )
+        if duplicate_review_request:
+            return self.apply_pr_event(event)
+        if not event.matches_identity(reviewer_logins=qaestro_reviewers, team_slugs=qaestro_teams):
+            return self.apply_pr_event(event)
+        requested_by = event.requested_identity
+        run = ReviewRun(
+            head_sha=_head_sha_for(event),
+            trigger=ReviewRunTrigger.REVIEW_REQUESTED,
+            requested_by=requested_by,
+        )
+        aggregate = self.apply_pr_event(event)
+        return replace(
+            aggregate,
+            qaestro_active=True,
+            activation_requested_by=requested_by,
+            review_runs=(*aggregate.review_runs, run),
+        )
+
+    def apply_review_request_removal(
+        self,
+        event: PRReviewRequestRemoved,
+        *,
+        qaestro_reviewers: tuple[str, ...] = (),
+        qaestro_teams: tuple[str, ...] = (),
+    ) -> PRAggregateState:
+        aggregate = self.apply_pr_event(event)
+        if not event.matches_identity(reviewer_logins=qaestro_reviewers, team_slugs=qaestro_teams):
+            return aggregate
+        return replace(aggregate, qaestro_active=False, activation_requested_by="")
 
     def record_ci_completed(self, event: CICompleted) -> PRAggregateState:
         record = CIWorkflowRunRecord.from_event(event, current_head_sha=self.current_head_sha)
@@ -303,10 +349,32 @@ class InMemoryPRAggregateStore:
         self._aggregates[(aggregate.repo_full_name, aggregate.pr_number)] = aggregate
         return aggregate
 
-    def apply_pr_event(self, event: PREvent) -> PRAggregateState:
+    def apply_pr_event(
+        self,
+        event: PREvent,
+        *,
+        qaestro_reviewers: tuple[str, ...] = (),
+        qaestro_teams: tuple[str, ...] = (),
+    ) -> PRAggregateState:
         existing = self.get(event.repo_full_name, event.pr_number)
-        aggregate = PRAggregateState.from_pr_event(event) if existing is None else existing.apply_pr_event(event)
-        return self.save(aggregate)
+        aggregate = PRAggregateState.from_pr_event(event) if existing is None else existing
+        if isinstance(event, PRReviewRequested):
+            return self.save(
+                aggregate.apply_review_request(
+                    event,
+                    qaestro_reviewers=qaestro_reviewers,
+                    qaestro_teams=qaestro_teams,
+                )
+            )
+        if isinstance(event, PRReviewRequestRemoved):
+            return self.save(
+                aggregate.apply_review_request_removal(
+                    event,
+                    qaestro_reviewers=qaestro_reviewers,
+                    qaestro_teams=qaestro_teams,
+                )
+            )
+        return self.save(aggregate.apply_pr_event(event))
 
     def record_ci_completed(self, event: CICompleted) -> PRAggregateState | None:
         if event.pr_number is None:

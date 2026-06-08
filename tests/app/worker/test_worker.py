@@ -98,9 +98,7 @@ def _result(event: PROpened, *, review_payload: PRReviewPayload | None = None) -
         pr_number=event.pr_number,
         body="worker output",
     )
-    # The worker only needs the event and rendered payload. The report is kept
-    # opaque here because report construction belongs to the orchestrator.
-    return PRWorkflowResult(
+    result = PRWorkflowResult(
         event=event,
         report=object(),  # type: ignore[arg-type]
         triage=PRWorkflowTriage(
@@ -112,6 +110,7 @@ def _result(event: PROpened, *, review_payload: PRReviewPayload | None = None) -
         review_payload=review_payload,
         stage_order=(WorkflowStage.ANALYZER, WorkflowStage.STRATEGY, WorkflowStage.RENDERER),
     )
+    return result
 
 
 def test_worker_processes_single_event_and_posts_comment() -> None:
@@ -163,6 +162,27 @@ def test_worker_treats_ci_no_output_result_as_success_without_posting() -> None:
 
     assert execution.status == WorkerStatus.SUCCEEDED
     assert execution.result is ci_result
+    assert orchestrator.events == [event]
+    assert poster.payloads == []
+
+
+def test_worker_treats_activation_gate_noop_as_success_without_posting() -> None:
+    event = _event()
+    noop_result = PRWorkflowResult(
+        event=event,
+        report=object(),  # type: ignore[arg-type]
+        triage=PRWorkflowTriage(depth=PRWorkflowDepth.NOOP, rationale="activation skipped", allowed_stages=()),
+        comment_payload=None,
+    )
+
+    orchestrator = RecordingOrchestrator(noop_result)
+    poster = RecordingOutputPoster()
+    worker = Worker(orchestrator=orchestrator, output_poster=poster)
+
+    execution = worker.process(EventJob(event=event, correlation_id=event.meta.correlation_id))
+
+    assert execution.status == WorkerStatus.SUCCEEDED
+    assert execution.result is noop_result
     assert orchestrator.events == [event]
     assert poster.payloads == []
 

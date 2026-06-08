@@ -171,7 +171,11 @@ class Worker:
             },
         )
 
-    def _run_once(self, job: EventJob, context: WorkerExecutionContext) -> PRWorkflowResult | CIWorkflowResult:
+    def _run_once(
+        self,
+        job: EventJob,
+        context: WorkerExecutionContext,
+    ) -> PRWorkflowResult | CIWorkflowResult:
         if context.timeout_seconds is not None:
             # Timeout currently guards orchestrator execution. Posting remains
             # synchronous so the Step 2 worker has a real timeout failure state
@@ -180,24 +184,28 @@ class Worker:
                 lambda: self._orchestrator.run(job.event),
                 timeout_seconds=context.timeout_seconds,
             )
-            if isinstance(result, PRWorkflowResult) and result.comment_payload is not None:
-                _post_pr_output(self._output_poster, result, correlation_id=job.correlation_id)
+            _post_pr_output(self._output_poster, result, correlation_id=job.correlation_id)
             return result
         return self._run_pipeline(job, context)
 
-    def _run_pipeline(self, job: EventJob, context: WorkerExecutionContext) -> PRWorkflowResult | CIWorkflowResult:
+    def _run_pipeline(
+        self,
+        job: EventJob,
+        context: WorkerExecutionContext,
+    ) -> PRWorkflowResult | CIWorkflowResult:
         # ``context`` is built here so Step 2 fixes the extension seam for
         # Agent Framework integration, even though no runner is invoked until
         # later milestones.
         _ = context.agent_runner
         result = self._orchestrator.run(job.event)
-        if isinstance(result, PRWorkflowResult) and result.comment_payload is not None:
-            _post_pr_output(self._output_poster, result, correlation_id=job.correlation_id)
+        _post_pr_output(self._output_poster, result, correlation_id=job.correlation_id)
         return result
 
 
-def _post_pr_output(poster: OutputPoster, result: PRWorkflowResult, *, correlation_id: str) -> object:
-    if result.comment_payload is None:
+def _post_pr_output(
+    poster: OutputPoster, result: PRWorkflowResult | CIWorkflowResult, *, correlation_id: str
+) -> object:
+    if not isinstance(result, PRWorkflowResult) or result.comment_payload is None:
         return None
     if result.review_payload is not None and isinstance(poster, ReviewOutputPoster):
         return poster.post_outputs(

@@ -42,6 +42,8 @@ class TestAppConfig:
             "QAESTRO_REDIS_CONSUMER": "worker-a",
             "QAESTRO_REDIS_READ_BLOCK_MS": "2500",
             "QAESTRO_REDIS_CLAIM_IDLE_MS": "60000",
+            "QAESTRO_REVIEWER_LOGINS": "qaestro[bot], qaestro-ci",
+            "QAESTRO_TEAM_SLUGS": "qaestro-reviewers",
         }
         with patch.dict(os.environ, env, clear=True):
             cfg = load_config()
@@ -55,6 +57,8 @@ class TestAppConfig:
         assert cfg.redis_consumer == "worker-a"
         assert cfg.redis_read_block_ms == 2500
         assert cfg.redis_claim_idle_ms == 60000
+        assert cfg.qaestro_reviewer_logins == ("qaestro[bot]", "qaestro-ci")
+        assert cfg.qaestro_team_slugs == ("qaestro-reviewers",)
 
     def test_frozen(self) -> None:
         cfg = load_config()

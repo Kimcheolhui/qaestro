@@ -84,6 +84,9 @@ def build_worker(cfg: AppConfig) -> Worker:
                     check_provider=ToolRuntimePRCheckSnapshotProvider(tool_runtime),
                 ),
             ),
+            aggregate_store=pr_aggregate_store,
+            activation_reviewer_logins=cfg.qaestro_reviewer_logins,
+            activation_team_slugs=cfg.qaestro_team_slugs,
             ci_orchestrator=CIWorkflowOrchestrator(
                 context_provider=ToolRuntimeCIContextProvider(tool_runtime),
                 aggregate_store=pr_aggregate_store,
