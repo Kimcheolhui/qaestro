@@ -82,12 +82,16 @@ def test_build_worker_wires_github_tool_runtime_for_durable_queue(tmp_path: Path
         github_app_id=1,
         github_app_installation_id=2,
         github_app_private_key_path=str(key_path),
+        qaestro_reviewer_logins=("qaestro[bot]",),
+        qaestro_team_slugs=("qaestro-reviewers",),
     )
 
     worker = build_worker(cfg)
 
     orchestrator = _orchestrator(worker)
     assert isinstance(orchestrator, EventOrchestrator)
+    assert orchestrator._activation_reviewer_logins == ("qaestro[bot]",)
+    assert orchestrator._activation_team_slugs == ("qaestro-reviewers",)
     pr_orchestrator = orchestrator._pr_orchestrator
     ci_orchestrator = orchestrator._ci_orchestrator
     assert isinstance(pr_orchestrator._context_provider, ToolRuntimePRContextProvider)

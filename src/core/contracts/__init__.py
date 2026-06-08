@@ -35,6 +35,9 @@ from .events import (
     PREvent,
     PROpened,
     PRReviewed,
+    PRReviewRequested,
+    PRReviewRequestEvent,
+    PRReviewRequestRemoved,
     PRUpdated,
 )
 from .parsers import (
@@ -62,6 +65,9 @@ __all__ = [
     "PRCommented",
     "PREvent",
     "PROpened",
+    "PRReviewRequestEvent",
+    "PRReviewRequestRemoved",
+    "PRReviewRequested",
     "PRReviewed",
     "PRUpdated",
     "QAReport",

@@ -95,6 +95,10 @@ class AppConfig:
     github_app_installation_id: int = 0
     github_app_private_key_path: str = ""
 
+    # ── Reviewer-request activation ─────────────────────────────────
+    qaestro_reviewer_logins: tuple[str, ...] = ()
+    qaestro_team_slugs: tuple[str, ...] = ()
+
     # ── Worker / queue ─────────────────────────────────────────────
     worker_concurrency: int = 4
     queue_backend: str = "memory"
@@ -123,6 +127,8 @@ class AppConfig:
             f"github_app_id={self.github_app_id!r}",
             f"github_app_installation_id={self.github_app_installation_id!r}",
             f"github_app_private_key_path={self.github_app_private_key_path!r}",
+            f"qaestro_reviewer_logins={self.qaestro_reviewer_logins!r}",
+            f"qaestro_team_slugs={self.qaestro_team_slugs!r}",
             f"worker_concurrency={self.worker_concurrency!r}",
             f"queue_backend={self.queue_backend!r}",
             f"redis_url={self.redis_url!r}",
@@ -151,6 +157,8 @@ _ENV_MAP: dict[str, tuple[str, type[Any]]] = {
     "github_app_id": ("GITHUB_APP_ID", int),
     "github_app_installation_id": ("GITHUB_APP_INSTALLATION_ID", int),
     "github_app_private_key_path": ("GITHUB_APP_PRIVATE_KEY_PATH", str),
+    "qaestro_reviewer_logins": ("REVIEWER_LOGINS", tuple),
+    "qaestro_team_slugs": ("TEAM_SLUGS", tuple),
     "worker_concurrency": ("WORKER_CONCURRENCY", int),
     "queue_backend": ("QUEUE_BACKEND", str),
     "redis_url": ("REDIS_URL", str),
@@ -199,6 +207,8 @@ def _convert_env_value(env_key: str, raw: str, converter: type[Any]) -> Any:
         except ValueError:
             msg = f"Invalid float value for {env_key}: {raw!r}"
             raise ValueError(msg) from None
+    if converter is tuple:
+        return tuple(item.strip() for item in raw.split(",") if item.strip())
     if converter is AgentRuntimeProvider:
         try:
             return AgentRuntimeProvider(raw)

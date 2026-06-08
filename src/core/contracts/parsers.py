@@ -29,6 +29,8 @@ from .events import (
     PRCommented,
     PROpened,
     PRReviewed,
+    PRReviewRequested,
+    PRReviewRequestRemoved,
     PRUpdated,
 )
 
@@ -78,12 +80,13 @@ def parse_github_pr_event(
     payload: dict[str, Any],
     action: str,
     correlation_id: str,
-) -> PROpened | PRUpdated | None:
+) -> PROpened | PRUpdated | PRReviewRequested | PRReviewRequestRemoved | None:
     """Parse a GitHub ``pull_request`` webhook payload.
 
-    Returns :class:`PROpened` for ``"opened"`` actions and :class:`PRUpdated`
-    for ``"synchronize"`` (and similar update actions).  Returns ``None`` for
-    actions we don't handle.
+    Returns :class:`PROpened` for ``"opened"`` actions, :class:`PRUpdated`
+    for ``"synchronize"`` (and similar update actions), and reviewer-request
+    activation events for ``"review_requested"`` / ``"review_request_removed"``.
+    Returns ``None`` for actions we don't handle.
     """
     pr: dict[str, Any] = payload.get("pull_request", {})
     repo: dict[str, Any] = payload.get("repository", {})
@@ -92,6 +95,10 @@ def parse_github_pr_event(
         event_type = EventType.PR_OPENED
     elif action in {"synchronize", "edited", "reopened"}:
         event_type = EventType.PR_UPDATED
+    elif action == "review_requested":
+        event_type = EventType.PR_REVIEW_REQUESTED
+    elif action == "review_request_removed":
+        event_type = EventType.PR_REVIEW_REQUEST_REMOVED
     else:
         return None
 
@@ -122,7 +129,48 @@ def parse_github_pr_event(
 
     if event_type == EventType.PR_OPENED:
         return PROpened(**common_kwargs)
+    if event_type == EventType.PR_REVIEW_REQUESTED:
+        review_request_kwargs = _review_request_kwargs(payload)
+        return PRReviewRequested(
+            meta=meta,
+            repo_full_name=common_kwargs["repo_full_name"],
+            pr_number=common_kwargs["pr_number"],
+            title=common_kwargs["title"],
+            body=common_kwargs["body"],
+            author=common_kwargs["author"],
+            base_branch=common_kwargs["base_branch"],
+            head_branch=common_kwargs["head_branch"],
+            diff_url=common_kwargs["diff_url"],
+            files_changed=files_changed,
+            head_sha=common_kwargs["head_sha"],
+            **review_request_kwargs,
+        )
+    if event_type == EventType.PR_REVIEW_REQUEST_REMOVED:
+        review_request_kwargs = _review_request_kwargs(payload)
+        return PRReviewRequestRemoved(
+            meta=meta,
+            repo_full_name=common_kwargs["repo_full_name"],
+            pr_number=common_kwargs["pr_number"],
+            title=common_kwargs["title"],
+            body=common_kwargs["body"],
+            author=common_kwargs["author"],
+            base_branch=common_kwargs["base_branch"],
+            head_branch=common_kwargs["head_branch"],
+            diff_url=common_kwargs["diff_url"],
+            files_changed=files_changed,
+            head_sha=common_kwargs["head_sha"],
+            **review_request_kwargs,
+        )
     return PRUpdated(**common_kwargs)
+
+
+def _review_request_kwargs(payload: dict[str, Any]) -> dict[str, str]:
+    requested_reviewer = _get(payload, "requested_reviewer", "login")
+    requested_team = _get(payload, "requested_team", "slug") or _get(payload, "requested_team", "name")
+    return {
+        "requested_reviewer": str(requested_reviewer or ""),
+        "requested_team": str(requested_team or ""),
+    }
 
 
 # ---------------------------------------------------------------------------

@@ -7,11 +7,14 @@ from datetime import UTC, datetime
 from src.core.contracts import (
     CICompleted,
     CIReadinessState,
+    Event,
     EventMeta,
     EventSource,
     EventType,
     FileChange,
     PROpened,
+    PRReviewRequested,
+    PRReviewRequestRemoved,
     PRUpdated,
 )
 from src.runtime.orchestrator import (
@@ -67,6 +70,54 @@ def _pr_update(*, event_id: str = "pr-update", head_sha: str = "sha-2") -> PRUpd
     )
 
 
+def _review_requested(
+    *,
+    event_id: str = "review-requested",
+    head_sha: str = "sha-1",
+    requested_reviewer: str = "qaestro[bot]",
+    requested_team: str = "",
+) -> PRReviewRequested:
+    return PRReviewRequested(
+        meta=_meta(event_id, EventType.PR_REVIEW_REQUESTED),
+        repo_full_name="Kimcheolhui/qaestro",
+        pr_number=54,
+        title="feat: aggregate readiness",
+        body="Wire PR aggregate state.",
+        author="Kimcheolhui",
+        base_branch="main",
+        head_branch="feat/pr-aggregate",
+        diff_url="https://github.com/Kimcheolhui/qaestro/pull/54.diff",
+        head_sha=head_sha,
+        files_changed=(FileChange(path="src/runtime/orchestrator/pr_aggregate.py", status="modified", additions=20),),
+        requested_reviewer=requested_reviewer,
+        requested_team=requested_team,
+    )
+
+
+def _review_request_removed(
+    *,
+    event_id: str = "review-request-removed",
+    head_sha: str = "sha-1",
+    requested_reviewer: str = "qaestro[bot]",
+    requested_team: str = "",
+) -> PRReviewRequestRemoved:
+    return PRReviewRequestRemoved(
+        meta=_meta(event_id, EventType.PR_REVIEW_REQUEST_REMOVED),
+        repo_full_name="Kimcheolhui/qaestro",
+        pr_number=54,
+        title="feat: aggregate readiness",
+        body="Wire PR aggregate state.",
+        author="Kimcheolhui",
+        base_branch="main",
+        head_branch="feat/pr-aggregate",
+        diff_url="https://github.com/Kimcheolhui/qaestro/pull/54.diff",
+        head_sha=head_sha,
+        files_changed=(FileChange(path="src/runtime/orchestrator/pr_aggregate.py", status="modified", additions=20),),
+        requested_reviewer=requested_reviewer,
+        requested_team=requested_team,
+    )
+
+
 def _ci_event(
     *,
     event_id: str,
@@ -111,6 +162,69 @@ def test_new_pr_head_supersedes_previous_revision_but_keeps_historical_evidence(
     assert aggregate.current_revision.head_sha == "sha-2"
     assert aggregate.current_revision.ci_runs == ()
     assert aggregate.current_revision.status is PRRevisionStatus.CURRENT
+
+
+def test_matching_reviewer_request_marks_aggregate_active_and_records_review_run() -> None:
+    aggregate = PRAggregateState.from_pr_event(_pr_event(head_sha="sha-1"))
+
+    aggregate = aggregate.apply_review_request(_review_requested(), qaestro_reviewers=("qaestro[bot]",))
+
+    assert aggregate.qaestro_active is True
+    assert aggregate.activation_requested_by == "qaestro[bot]"
+    assert aggregate.review_runs[-1].trigger is ReviewRunTrigger.REVIEW_REQUESTED
+    assert aggregate.review_runs[-1].head_sha == "sha-1"
+    assert aggregate.review_runs[-1].requested_by == "qaestro[bot]"
+
+
+def test_duplicate_reviewer_request_event_does_not_record_duplicate_review_run() -> None:
+    aggregate = PRAggregateState.from_pr_event(_pr_event(head_sha="sha-1"))
+    event = _review_requested(event_id="review-requested-duplicate")
+
+    aggregate = aggregate.apply_review_request(event, qaestro_reviewers=("qaestro[bot]",))
+    aggregate = aggregate.apply_review_request(event, qaestro_reviewers=("qaestro[bot]",))
+
+    assert aggregate.qaestro_active is True
+    assert len(aggregate.review_runs) == 1
+    assert aggregate.event_ids.count("review-requested-duplicate") == 1
+
+
+def test_non_matching_reviewer_request_keeps_aggregate_inactive() -> None:
+    aggregate = PRAggregateState.from_pr_event(_pr_event(head_sha="sha-1"))
+
+    aggregate = aggregate.apply_review_request(
+        _review_requested(requested_reviewer="someone-else"),
+        qaestro_reviewers=("qaestro[bot]",),
+    )
+
+    assert aggregate.qaestro_active is False
+    assert aggregate.activation_requested_by == ""
+    assert aggregate.review_runs == ()
+
+
+def test_matching_reviewer_request_removal_deactivates_future_reviews() -> None:
+    aggregate = PRAggregateState.from_pr_event(_pr_event(head_sha="sha-1"))
+    aggregate = aggregate.apply_review_request(_review_requested(), qaestro_reviewers=("qaestro[bot]",))
+
+    aggregate = aggregate.apply_review_request_removal(
+        _review_request_removed(),
+        qaestro_reviewers=("qaestro[bot]",),
+    )
+
+    assert aggregate.qaestro_active is False
+    assert aggregate.activation_requested_by == ""
+    assert aggregate.review_runs[-1].trigger is ReviewRunTrigger.REVIEW_REQUESTED
+
+
+def test_store_applies_activation_events_only_for_matching_reviewer_identity() -> None:
+    store = InMemoryPRAggregateStore()
+    event: Event = _review_requested(requested_reviewer="someone-else")
+
+    inactive = store.apply_pr_event(event, qaestro_reviewers=("qaestro[bot]",))
+    assert inactive.qaestro_active is False
+
+    active = store.apply_pr_event(_review_requested(event_id="requested-2"), qaestro_reviewers=("qaestro[bot]",))
+    assert active.qaestro_active is True
+    assert active.review_runs[-1].trigger is ReviewRunTrigger.REVIEW_REQUESTED
 
 
 def test_superseded_revision_relabels_previous_current_ci_runs_as_historical() -> None:

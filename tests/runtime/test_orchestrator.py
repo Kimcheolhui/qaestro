@@ -24,6 +24,7 @@ from src.core.contracts import (
     PREvent,
     PROpened,
     PRReviewed,
+    PRReviewRequested,
     RiskLevel,
     StrategyAction,
     StrategyResult,
@@ -39,6 +40,7 @@ from src.runtime.orchestrator import (
     CIWorkflowOrchestrator,
     CIWorkflowResult,
     EventOrchestrator,
+    InMemoryPRAggregateStore,
     PRWorkflowDepth,
     PRWorkflowDraft,
     PRWorkflowOrchestrator,
@@ -212,6 +214,132 @@ def test_event_orchestrator_dispatches_pr_events_to_pr_sub_orchestrator():
     assert result.comment_payload is not None
     assert result.comment_payload.repo_full_name == "Kimcheolhui/qaestro"
     assert result.comment_payload.pr_number == 31
+
+
+def test_event_orchestrator_drops_non_matching_review_requested_activation_event() -> None:
+    event = PRReviewRequested(
+        meta=_event_meta("evt-review-requested", EventType.PR_REVIEW_REQUESTED, "corr-review-requested"),
+        repo_full_name="Kimcheolhui/qaestro",
+        pr_number=31,
+        title="feat: connector",
+        body="",
+        author="Kimcheolhui",
+        base_branch="main",
+        head_branch="feat/connector",
+        diff_url="https://github.com/Kimcheolhui/qaestro/pull/31.diff",
+        head_sha="head-sha",
+        requested_reviewer="someone-else",
+    )
+    orchestrator = EventOrchestrator(activation_reviewer_logins=("qaestro[bot]",))
+
+    result = orchestrator.run(event)
+
+    assert isinstance(result, PRWorkflowResult)
+    assert result.comment_payload is None
+    assert result.triage.depth is PRWorkflowDepth.NOOP
+
+
+def test_event_orchestrator_drops_review_requested_event_when_activation_identity_is_unconfigured() -> None:
+    event = PRReviewRequested(
+        meta=_event_meta("evt-review-requested", EventType.PR_REVIEW_REQUESTED, "corr-review-requested"),
+        repo_full_name="Kimcheolhui/qaestro",
+        pr_number=31,
+        title="feat: connector",
+        body="",
+        author="Kimcheolhui",
+        base_branch="main",
+        head_branch="feat/connector",
+        diff_url="https://github.com/Kimcheolhui/qaestro/pull/31.diff",
+        head_sha="head-sha",
+        requested_reviewer="qaestro[bot]",
+    )
+    orchestrator = EventOrchestrator()
+
+    result = orchestrator.run(event)
+
+    assert isinstance(result, PRWorkflowResult)
+    assert result.comment_payload is None
+    assert result.triage.depth is PRWorkflowDepth.NOOP
+
+
+def test_event_orchestrator_runs_matching_review_requested_activation_event() -> None:
+    event = PRReviewRequested(
+        meta=_event_meta("evt-review-requested", EventType.PR_REVIEW_REQUESTED, "corr-review-requested"),
+        repo_full_name="Kimcheolhui/qaestro",
+        pr_number=31,
+        title="feat: connector",
+        body="",
+        author="Kimcheolhui",
+        base_branch="main",
+        head_branch="feat/connector",
+        diff_url="https://github.com/Kimcheolhui/qaestro/pull/31.diff",
+        head_sha="head-sha",
+        requested_reviewer="qaestro[bot]",
+    )
+    orchestrator = EventOrchestrator(activation_reviewer_logins=("qaestro[bot]",))
+
+    result = orchestrator.run(event)
+
+    assert isinstance(result, PRWorkflowResult)
+    assert result.event is event
+    assert result.comment_payload is not None
+
+
+def test_event_orchestrator_re_evaluates_active_pr_when_current_head_ci_completes() -> None:
+    activation = PRReviewRequested(
+        meta=_event_meta("evt-review-requested", EventType.PR_REVIEW_REQUESTED, "corr-review-requested"),
+        repo_full_name="Kimcheolhui/qaestro",
+        pr_number=31,
+        title="feat: connector",
+        body="",
+        author="Kimcheolhui",
+        base_branch="main",
+        head_branch="feat/connector",
+        diff_url="https://github.com/Kimcheolhui/qaestro/pull/31.diff",
+        head_sha="active-head",
+        requested_reviewer="qaestro[bot]",
+    )
+    ci_event = CICompleted(
+        meta=_event_meta("evt-ci-active", EventType.CI_COMPLETED, "corr-ci-active"),
+        repo_full_name="Kimcheolhui/qaestro",
+        pr_number=31,
+        commit_sha="active-head",
+        workflow_name="Tests",
+        conclusion="success",
+        run_url="https://github.com/Kimcheolhui/qaestro/actions/runs/1",
+    )
+    store = InMemoryPRAggregateStore()
+    orchestrator = EventOrchestrator(
+        aggregate_store=store,
+        activation_reviewer_logins=("qaestro[bot]",),
+    )
+
+    first_result = orchestrator.run(activation)
+    second_result = orchestrator.run(ci_event)
+
+    assert isinstance(first_result, PRWorkflowResult)
+    assert isinstance(second_result, PRWorkflowResult)
+    assert second_result.event.meta.event_type is EventType.CI_COMPLETED
+    assert second_result.event.head_sha == "active-head"
+    assert second_result.comment_payload is not None
+
+
+def test_event_orchestrator_does_not_re_evaluate_inactive_pr_when_ci_completes() -> None:
+    ci_event = CICompleted(
+        meta=_event_meta("evt-ci-inactive", EventType.CI_COMPLETED, "corr-ci-inactive"),
+        repo_full_name="Kimcheolhui/qaestro",
+        pr_number=31,
+        commit_sha="inactive-head",
+        workflow_name="Tests",
+        conclusion="success",
+        run_url="https://github.com/Kimcheolhui/qaestro/actions/runs/1",
+    )
+    orchestrator = EventOrchestrator(activation_reviewer_logins=("qaestro[bot]",))
+
+    result = orchestrator.run(ci_event)
+
+    assert isinstance(result, CIWorkflowResult)
+    assert result.comment_payload is None
 
 
 def test_pr_workflow_orchestrator_sets_basic_official_review_payload_fields() -> None:

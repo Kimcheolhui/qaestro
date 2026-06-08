@@ -9,7 +9,7 @@ from pathlib import Path
 
 from src.app.gateway import GitHubWebhookGateway, WebhookRequest
 from src.app.worker import EventJob
-from src.core.contracts import CICompleted, EventType, PROpened
+from src.core.contracts import CICompleted, EventType, PROpened, PRReviewRequested
 
 FIXTURES = Path(__file__).parents[2] / "fixtures"
 SECRET = "webhook-secret"
@@ -58,6 +58,26 @@ def test_valid_pull_request_opened_webhook_enqueues_normalized_pr_event() -> Non
     assert job.event.meta.correlation_id == "delivery-pr-001"
     assert job.event.pr_number == 123
     assert job.event.repo_full_name == "acme-corp/web-api"
+
+
+def test_valid_pull_request_review_requested_webhook_enqueues_activation_event() -> None:
+    queue = RecordingQueue()
+    gateway = GitHubWebhookGateway(secret=SECRET, queue=queue)
+    payload = json.loads(_body("github_pr_opened.json"))
+    payload["action"] = "review_requested"
+    payload["requested_reviewer"] = {"login": "qaestro[bot]"}
+    body = json.dumps(payload).encode("utf-8")
+
+    response = gateway.handle(_request("pull_request", body, delivery="delivery-review-requested"))
+
+    assert response.status == 202
+    assert len(queue.jobs) == 1
+    job = queue.jobs[0]
+    assert isinstance(job.event, PRReviewRequested)
+    assert job.event.meta.event_type == EventType.PR_REVIEW_REQUESTED
+    assert job.event.meta.correlation_id == "delivery-review-requested"
+    assert job.event.requested_reviewer == "qaestro[bot]"
+    assert job.event.head_sha == "def789abc123456"
 
 
 def test_valid_workflow_run_webhook_enqueues_normalized_ci_event() -> None:

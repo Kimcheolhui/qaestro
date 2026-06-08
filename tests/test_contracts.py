@@ -35,6 +35,8 @@ from src.core.contracts.events import (
     PREvent,
     PROpened,
     PRReviewed,
+    PRReviewRequested,
+    PRReviewRequestRemoved,
     PRUpdated,
 )
 
@@ -64,13 +66,15 @@ class TestEventTypeEnum:
     def test_values(self):
         assert EventType.PR_OPENED.value == "pr_opened"
         assert EventType.PR_UPDATED.value == "pr_updated"
+        assert EventType.PR_REVIEW_REQUESTED.value == "pr_review_requested"
+        assert EventType.PR_REVIEW_REQUEST_REMOVED.value == "pr_review_request_removed"
         assert EventType.PR_COMMENTED.value == "pr_commented"
         assert EventType.PR_REVIEWED.value == "pr_reviewed"
         assert EventType.CI_COMPLETED.value == "ci_completed"
         assert EventType.CHAT_MENTION.value == "chat_mention"
 
     def test_member_count(self):
-        assert len(EventType) == 6
+        assert len(EventType) == 8
 
     def test_unique_values(self):
         values = [e.value for e in EventType]
@@ -270,6 +274,48 @@ class TestPRUpdated:
         assert pr.meta.event_type == EventType.PR_UPDATED
 
 
+class TestPRReviewRequested:
+    """Reviewer-request activation events carry the requested reviewer/team."""
+
+    def test_requested_reviewer(self):
+        event = PRReviewRequested(
+            meta=_make_meta(EventType.PR_REVIEW_REQUESTED),
+            repo_full_name="o/r",
+            pr_number=7,
+            title="feat: activate qaestro",
+            body="",
+            author="bob",
+            base_branch="main",
+            head_branch="feat/activation",
+            diff_url="",
+            head_sha="abc123",
+            requested_reviewer="qaestro[bot]",
+        )
+
+        assert isinstance(event, PREvent)
+        assert event.requested_reviewer == "qaestro[bot]"
+        assert event.requested_team == ""
+
+    def test_removed_team_request(self):
+        event = PRReviewRequestRemoved(
+            meta=_make_meta(EventType.PR_REVIEW_REQUEST_REMOVED),
+            repo_full_name="o/r",
+            pr_number=7,
+            title="feat: activate qaestro",
+            body="",
+            author="bob",
+            base_branch="main",
+            head_branch="feat/activation",
+            diff_url="",
+            head_sha="abc123",
+            requested_team="qaestro-reviewers",
+        )
+
+        assert isinstance(event, PREvent)
+        assert event.requested_reviewer == ""
+        assert event.requested_team == "qaestro-reviewers"
+
+
 class TestPRCommented:
     """PRCommented defaults and construction."""
 
@@ -411,6 +457,8 @@ class TestEventUnion:
         event_types = Event.__args__ if hasattr(Event, "__args__") else []
         assert PROpened in event_types
         assert PRUpdated in event_types
+        assert PRReviewRequested in event_types
+        assert PRReviewRequestRemoved in event_types
         assert PRCommented in event_types
         assert PRReviewed in event_types
         assert CICompleted in event_types
